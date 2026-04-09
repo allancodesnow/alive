@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(npx next:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}

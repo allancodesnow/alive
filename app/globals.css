@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Archivo Black", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Space Grotesk", sans-serif;
+}
+
+html, body {
+  background: #f4efe6;
+  color: #0a0a0a;
+  -webkit-font-smoothing: antialiased;
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: #f4efe6;
+}
+
+/* subtle paper grain — no grid */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 0;
+  background-image:
+    radial-gradient(rgba(10,10,10,.035) 1px, transparent 1px),
+    radial-gradient(rgba(10,10,10,.025) 1px, transparent 1px);
+  background-size: 4px 4px, 9px 9px;
+  background-position: 0 0, 2px 2px;
+  mix-blend-mode: multiply;
+}
+
+::selection { background: #c6ff3d; color: #0a0a0a; }
+
+/* nicer scrollbar */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: #f4efe6; }
+::-webkit-scrollbar-thumb { background: #0a0a0a; border: 3px solid #f4efe6; }
+
+.bar > i {
+  display: block;
+  height: 100%;
+  background: #c6ff3d;
+  background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.18) 0 6px, transparent 6px 12px);
+  width: var(--w, 72%);
+  transition: width .8s ease;
+}
+
+.btn-brut {
+  font-family: var(--font-display);
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: -.005em;
+  padding: 16px 22px;
+  border: 3px solid #0a0a0a;
+  background: #f4efe6;
+  box-shadow: 6px 6px 0 0 #0a0a0a;
+  cursor: pointer;
+  transition: transform .15s cubic-bezier(.2,.8,.2,1), box-shadow .15s cubic-bezier(.2,.8,.2,1);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-brut:hover { transform: translate(-2px,-2px); box-shadow: 8px 8px 0 0 #0a0a0a; }
+.btn-brut:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 0 #0a0a0a; }
+@media (max-width: 640px) {
+  .btn-brut { font-size: 14px; padding: 14px 18px; box-shadow: 4px 4px 0 0 #0a0a0a; }
+}
+
+.card {
+  background: #f4efe6;
+  border: 3px solid #0a0a0a;
+  box-shadow: 6px 6px 0 0 #0a0a0a;
+}
+@media (max-width: 640px) {
+  .card { box-shadow: 4px 4px 0 0 #0a0a0a; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
