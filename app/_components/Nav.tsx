@@ -17,7 +17,7 @@ export default function Nav({ active }: { active?: string }) {
   const { wallet, openModal, disconnect } = useWallet();
 
   return (
-    <nav className="sticky top-0 z-50 bg-bone border-b-[3px] border-ink">
+    <nav className="sticky top-0 z-50 bg-bone border-b-[3px] border-ink" aria-label="Main navigation">
       <div className="max-w-[1200px] mx-auto flex items-center justify-between px-5 sm:px-8 py-3">
         <Link href="/" className="flex items-center gap-2.5 font-display text-[22px] sm:text-[26px] tracking-tighter">
           <span className="w-[16px] h-[16px] border-[3px] border-ink shadow-[2px_2px_0_0_#0a0a0a] animate-pulse2" />
@@ -29,6 +29,7 @@ export default function Nav({ active }: { active?: string }) {
             <Link
               key={l}
               href={href}
+              aria-current={active === key ? "page" : undefined}
               className={`font-mono font-bold text-[12px] uppercase px-3 py-2 border-[3px] border-ink transition ${
                 active === key
                   ? "bg-acid shadow-[3px_3px_0_0_#0a0a0a]"
@@ -41,12 +42,14 @@ export default function Nav({ active }: { active?: string }) {
           {wallet ? (
             <div className="flex items-center gap-1.5">
               <span className="font-mono font-bold text-[11px] uppercase px-3 py-2 border-[3px] border-ink bg-acid shadow-[3px_3px_0_0_#0a0a0a]">
+                <span className="font-mono text-[9px] bg-ink text-bone px-1 py-0.5 mr-1.5">DEMO</span>
                 {wallet.balance.toFixed(2)} SOL · {short(wallet.address)}
               </span>
               <button
                 onClick={disconnect}
                 className="font-mono font-bold text-[11px] uppercase px-2.5 py-2 border-[3px] border-ink bg-bone hover:bg-hot transition"
-                title="disconnect"
+                aria-label="Disconnect wallet"
+                title="Disconnect wallet"
               >
                 ✕
               </button>
@@ -63,7 +66,8 @@ export default function Nav({ active }: { active?: string }) {
         <button
           onClick={() => setOpen((o) => !o)}
           className="md:hidden w-10 h-10 border-[3px] border-ink bg-bone shadow-[3px_3px_0_0_#0a0a0a] flex flex-col items-center justify-center gap-[3px]"
-          aria-label="menu"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
         >
           <span className={`w-5 h-[3px] bg-ink transition ${open ? "rotate-45 translate-y-[5px]" : ""}`} />
           <span className={`w-5 h-[3px] bg-ink transition ${open ? "opacity-0" : ""}`} />
@@ -77,6 +81,7 @@ export default function Nav({ active }: { active?: string }) {
               key={l}
               href={href}
               onClick={() => setOpen(false)}
+              aria-current={active === key ? "page" : undefined}
               className={`font-mono font-bold text-[13px] uppercase px-3 py-3 border-[3px] border-ink ${
                 active === key ? "bg-acid" : "bg-bone"
               }`}

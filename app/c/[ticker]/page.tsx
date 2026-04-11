@@ -1,16 +1,40 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import Nav from "../../_components/Nav";
 import Footer from "../../_components/Footer";
-import { findCharacter, characters } from "../../_lib/characters";
+import Stat from "../../_components/Stat";
+import { findCharacter, characters, formatMarketCap } from "../../_lib/characters";
+import { characterJsonLd } from "../../_lib/jsonld";
+import { BASE_URL } from "../../_lib/constants";
 
 export function generateStaticParams() {
   return characters.map((c) => ({ ticker: c.ticker }));
 }
 
+export async function generateMetadata({ params }: { params: { ticker: string } }): Promise<Metadata> {
+  const c = findCharacter(params.ticker);
+  if (!c) return {};
+  return {
+    title: `${c.name} ($${c.ticker}) — ALIVE`,
+    description: c.bio,
+    openGraph: { title: `${c.name} ($${c.ticker})`, description: c.bio, type: "website" },
+    alternates: { canonical: `${BASE_URL}/c/${c.ticker}` },
+  };
+}
+
+// Deterministic engagement numbers from ticker (avoids Math.random() hydration mismatch)
+function seed(ticker: string, i: number, factor: number): number {
+  const base = ticker.charCodeAt(0) + ticker.charCodeAt(ticker.length - 1) + i;
+  return ((base * factor + 31) % 997);
+}
+
 export default function CharacterPage({ params }: { params: { ticker: string } }) {
   const c = findCharacter(params.ticker);
   if (!c) notFound();
+
+  // Deterministic fake token address
+  const tokenAddr = `ALV${c.ticker}${c.holders.toString(36).toUpperCase()}${c.hp.toString(36).toUpperCase()}`;
 
   const tweets = [
     { time: "4m", text: '"if u sell rn i will literally appear in ur dreams. this is not a threat. this is a feature."' },
@@ -21,20 +45,26 @@ export default function CharacterPage({ params }: { params: { ticker: string } }
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(characterJsonLd(c)) }}
+      />
       <Nav />
       <main className="px-5 sm:px-8 py-10 sm:py-14">
         <div className="max-w-[1200px] mx-auto">
-          <Link href="/characters" className="font-mono font-bold text-[11px] uppercase opacity-60 hover:opacity-100 transition">← all creatures</Link>
+          <Link href="/characters" className="font-mono font-bold text-[11px] uppercase opacity-70 hover:opacity-100 transition">← all creatures</Link>
 
           <div className="mt-4 grid lg:grid-cols-[auto_1fr] gap-6 sm:gap-10 items-start">
             <div
               className="w-full lg:w-[280px] aspect-square border-[3px] border-ink shadow-[8px_8px_0_0_#0a0a0a] flex items-center justify-center text-[120px]"
               style={{ background: c.ava }}
+              role="img"
+              aria-label={`${c.name} avatar`}
             >
               {c.emoji}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-mono font-extrabold text-[11px] uppercase opacity-60">{c.handle} · {c.age} alive</div>
+              <div className="font-mono font-extrabold text-[11px] uppercase opacity-70">{c.handle} · {c.age} alive</div>
               <h1 className="font-display uppercase leading-[.9] tracking-[-.04em] text-[48px] sm:text-[72px] lg:text-[96px] mt-2">
                 {c.name} <span className="text-hot">${c.ticker}</span>
               </h1>
@@ -44,7 +74,7 @@ export default function CharacterPage({ params }: { params: { ticker: string } }
                 <Stat k="Vitality" v={`${c.vit}%`} accent={c.vit < 30 ? "text-blood" : c.vit < 60 ? "text-ink" : "text-[#1a8c1a]"} />
                 <Stat k="HP" v={c.hp.toLocaleString()} mid />
                 <Stat k="Holders" v={c.holders.toLocaleString()} mid />
-                <Stat k="Market cap" v={c.mc} />
+                <Stat k="Market cap" v={formatMarketCap(c.mc)} />
               </div>
 
               <div className="mt-4">
@@ -64,9 +94,9 @@ export default function CharacterPage({ params }: { params: { ticker: string } }
               </div>
 
               <div className="flex flex-wrap gap-3 mt-6">
-                <button className="btn-brut !bg-acid">↑ Buy ${c.ticker}</button>
-                <button className="btn-brut">↓ Sell</button>
-                <button className="btn-brut !bg-hot">⚔ Send to arena</button>
+                <button className="btn-brut !bg-acid" aria-label={`Buy $${c.ticker} tokens`}>↑ Buy ${c.ticker}</button>
+                <button className="btn-brut" aria-label={`Sell $${c.ticker} tokens`}>↓ Sell</button>
+                <button className="btn-brut !bg-hot" aria-label={`Send ${c.name} to the battle arena`}>⚔ Send to arena</button>
               </div>
 
               <div className="flex gap-1.5 mt-4 flex-wrap">
@@ -86,12 +116,12 @@ export default function CharacterPage({ params }: { params: { ticker: string } }
               <div className="space-y-3">
                 {tweets.map((t, i) => (
                   <div key={i} className="card p-4">
-                    <div className="font-mono text-[10px] font-extrabold uppercase opacity-60 mb-1.5">{c.handle} · {t.time}</div>
+                    <div className="font-mono text-[10px] font-extrabold uppercase opacity-70 mb-1.5">{c.handle} · {t.time}</div>
                     <p className="text-[14px] font-semibold leading-snug">{t.text}</p>
-                    <div className="flex gap-4 mt-2.5 font-mono text-[10px] font-bold opacity-60">
-                      <span>↻ {Math.floor(Math.random() * 2000)}</span>
-                      <span>♥ {Math.floor(Math.random() * 9000)}</span>
-                      <span>👁 {Math.floor(Math.random() * 200)}k</span>
+                    <div className="flex gap-4 mt-2.5 font-mono text-[10px] font-bold opacity-70">
+                      <span>↻ {seed(c.ticker, i, 7)}</span>
+                      <span>♥ {seed(c.ticker, i, 13) * 9}</span>
+                      <span>👁 {seed(c.ticker, i, 3)}k</span>
                     </div>
                   </div>
                 ))}
@@ -100,15 +130,15 @@ export default function CharacterPage({ params }: { params: { ticker: string } }
             <aside className="space-y-3">
               <h2 className="font-display text-[28px] sm:text-[32px] uppercase tracking-[-.02em] mb-4">Status</h2>
               <div className="card p-4">
-                <div className="font-mono text-[10px] font-extrabold uppercase opacity-60">Mood</div>
+                <div className="font-mono text-[10px] font-extrabold uppercase opacity-70">Mood</div>
                 <div className="font-display text-[22px] mt-1">{c.mood}</div>
               </div>
               <div className="card p-4">
-                <div className="font-mono text-[10px] font-extrabold uppercase opacity-60">Token</div>
-                <div className="font-mono text-[12px] font-bold mt-1 break-all">ALV{c.ticker}xxx{Math.random().toString(36).slice(2, 10)}</div>
+                <div className="font-mono text-[10px] font-extrabold uppercase opacity-70">Token</div>
+                <div className="font-mono text-[12px] font-bold mt-1 break-all">{tokenAddr}</div>
               </div>
               <div className="card p-4 bg-sun">
-                <div className="font-mono text-[10px] font-extrabold uppercase opacity-70">Pro tip</div>
+                <div className="font-mono text-[10px] font-extrabold uppercase opacity-75">Pro tip</div>
                 <div className="text-[13px] font-semibold mt-1 leading-snug">Vitality below 30% caps tweet quality and battle stats. Feed it.</div>
               </div>
             </aside>
@@ -117,14 +147,5 @@ export default function CharacterPage({ params }: { params: { ticker: string } }
       </main>
       <Footer />
     </>
-  );
-}
-
-function Stat({ k, v, mid, accent }: { k: string; v: string; mid?: boolean; accent?: string }) {
-  return (
-    <div className={`p-3 ${mid ? "border-l-[3px] border-ink" : ""}`}>
-      <div className="font-mono text-[9px] font-extrabold uppercase opacity-60">{k}</div>
-      <div className={`font-display text-[18px] mt-0.5 ${accent || ""}`}>{v}</div>
-    </div>
   );
 }

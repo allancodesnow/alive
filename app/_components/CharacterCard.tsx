@@ -1,26 +1,30 @@
 import Link from "next/link";
 import type { Character } from "../_lib/characters";
+import { formatMarketCap } from "../_lib/characters";
 
 export default function CharacterCard({ c }: { c: Character }) {
   return (
     <Link
       href={`/c/${c.ticker}`}
       className="card hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[8px_8px_0_0_#0a0a0a] transition p-4 block"
+      aria-label={`View ${c.name} ($${c.ticker}) — Vitality ${c.vit}%`}
     >
       <div className="flex items-center gap-3.5">
         <div
           className="w-14 h-14 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] flex-none flex items-center justify-center text-[26px]"
           style={{ background: c.ava }}
+          role="img"
+          aria-label={`${c.name} avatar`}
         >
           {c.emoji}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-display text-[20px] uppercase tracking-[-.02em] leading-none truncate">{c.name}</div>
-          <div className="font-mono text-[11px] font-extrabold opacity-60 mt-1">${c.ticker} · {c.age}</div>
+          <div className="font-mono text-[11px] font-extrabold opacity-70 mt-1">${c.ticker} · {c.age}</div>
         </div>
-        <div className="font-mono text-[10px] font-extrabold uppercase opacity-70 text-right">
+        <div className="font-mono text-[10px] font-extrabold uppercase opacity-75 text-right">
           <div>MC</div>
-          <div className="text-ink/100">{c.mc}</div>
+          <div>{formatMarketCap(c.mc)}</div>
         </div>
       </div>
       <div className="flex justify-between font-mono text-[10px] font-extrabold uppercase mt-4 mb-1.5">
@@ -30,10 +34,10 @@ export default function CharacterCard({ c }: { c: Character }) {
       <div className="bar h-[14px] border-[3px] border-ink bg-bone relative overflow-hidden">
         <i
           style={{
-            ["--w" as any]: `${c.vit}%`,
+            "--w": `${c.vit}%`,
             background: c.crit ? "#ff3da8" : c.vit < 30 ? "#ffe14a" : "#c6ff3d",
             backgroundImage: "repeating-linear-gradient(45deg,rgba(0,0,0,.18) 0 6px,transparent 6px 12px)",
-          }}
+          } as React.CSSProperties}
           data-w={c.vit}
         />
       </div>

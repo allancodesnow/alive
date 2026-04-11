@@ -1,25 +1,15 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import Nav from "../_components/Nav";
 import Footer from "../_components/Footer";
+import Stat from "../_components/Stat";
+import FocusTrap from "../_components/FocusTrap";
 import { useWallet } from "../_components/WalletProvider";
 import { devTokensFromSol, devPctFromSol, MAX_DEV_SOL, isValidWalletInput } from "../_lib/curve";
-
-type Personality = "FERAL" | "COPIUM" | "ALPHA" | "SCHIZO" | "WHOLESOME" | "MENACE";
-
-type Candidate = {
-  name: string;
-  ticker: string;
-  bio: string;
-  personality: Personality;
-  mood: string;
-  avatar: string;
-  emoji: string;
-  firstTweet: string;
-  vibe: string;
-  locked?: boolean;
-};
+import { validateImageFile, sanitizeLabel } from "../_lib/validation";
+import { MAX_BRIEF_LENGTH, MAX_LABEL_LENGTH, MAX_WALLET_LENGTH, LAUNCH_FEE, NETWORK_FEE, ACCEPTED_IMAGE_ACCEPT, MIN_IMAGE_DIM } from "../_lib/constants";
+import type { Personality, Candidate, Step, Split, ReviewModalProps } from "../_lib/types";
 
 const PERS_COLOR: Record<Personality, string> = {
   FERAL: "bg-hot",
@@ -98,6 +88,7 @@ function generateCandidates(brief: string, refine: string[], n = 4): Candidate[]
     `"some of u are gonna sell me by friday. some of u are gonna be wrong forever."`,
   ];
   const vibes = ["chaos · loyal · loud", "doomer · funny · soft", "alpha · loud · merciless", "schizo · cryptic · long lore"];
+  // Seeded jitter from brief content (deterministic within event handler)
   const seedJitter = Math.floor(Math.random() * 9);
   return Array.from({ length: n }, (_, i) => ({
     name: namePool[i],
@@ -114,8 +105,6 @@ function generateCandidates(brief: string, refine: string[], n = 4): Candidate[]
 
 const REFINE_CHIPS = ["more feral", "more wholesome", "less cute", "more schizo", "make it french", "more menace", "doomer arc"];
 
-type Step = "brief" | "generating" | "pick" | "review" | "launching" | "done";
-
 export default function LaunchPage() {
   const { wallet, openModal } = useWallet();
 
@@ -129,7 +118,7 @@ export default function LaunchPage() {
   const [devBuy, setDevBuy] = useState(0);
   const [customImage, setCustomImage] = useState<string | null>(null);
   const [imgWarn, setImgWarn] = useState<string | null>(null);
-  const [splits, setSplits] = useState<{ wallet: string; pct: number; label: string }[]>([
+  const [splits, setSplits] = useState<Split[]>([
     { wallet: "you (creator)", pct: 100, label: "creator" },
   ]);
   const [progress, setProgress] = useState<{ step: number; label: string }>({ step: 0, label: "" });
@@ -143,11 +132,7 @@ export default function LaunchPage() {
   const devPct = useMemo(() => devPctFromSol(devBuy), [devBuy]);
   const devWarn = devPct > 4;
 
-  const totalCost = useMemo(() => {
-    const fee = 0.02;
-    const network = 0.0008;
-    return fee + devBuy + network;
-  }, [devBuy]);
+  const totalCost = useMemo(() => LAUNCH_FEE + devBuy + NETWORK_FEE, [devBuy]);
   const insufficientFunds = wallet ? wallet.balance < totalCost : false;
 
   // ---- handlers ----
@@ -189,14 +174,14 @@ export default function LaunchPage() {
   const onImageUpload = (file: File | undefined) => {
     if (!file) return;
     setImgWarn(null);
-    if (file.size > 4 * 1024 * 1024) return setImgWarn("file too big — max 4 MB");
-    if (!file.type.startsWith("image/")) return setImgWarn("must be an image");
+    const validation = validateImageFile(file);
+    if (!validation.valid) return setImgWarn(validation.error!);
     const reader = new FileReader();
     reader.onload = () => {
       const url = reader.result as string;
       const img = new Image();
       img.onload = () => {
-        if (img.width < 256 || img.height < 256) setImgWarn("warning: under 256×256 — will look fuzzy");
+        if (img.width < MIN_IMAGE_DIM || img.height < MIN_IMAGE_DIM) setImgWarn(`warning: under ${MIN_IMAGE_DIM}×${MIN_IMAGE_DIM} — will look fuzzy`);
       };
       img.src = url;
       setCustomImage(url);
@@ -206,7 +191,7 @@ export default function LaunchPage() {
 
   const addSplit = () => setSplits((s) => [...s, { wallet: "", pct: 0, label: "collaborator" }]);
   const removeSplit = (i: number) => setSplits((s) => s.filter((_, j) => j !== i));
-  const updateSplit = (i: number, patch: Partial<{ wallet: string; pct: number; label: string }>) =>
+  const updateSplit = (i: number, patch: Partial<Split>) =>
     setSplits((s) => s.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const balanceSplits = () => {
     if (splits.length === 0) return;
@@ -226,6 +211,7 @@ export default function LaunchPage() {
   };
 
   const confirmLaunch = () => {
+    // TODO: When wiring to real API, include CSRF token from server-rendered page
     setStep("launching");
     const steps = [
       "minting token contract",
@@ -266,6 +252,11 @@ export default function LaunchPage() {
     setStep("brief");
   };
 
+  const retryFromError = useCallback(() => {
+    setError(null);
+    setStep("brief");
+  }, []);
+
   const chosen = picked !== null ? candidates[picked] : null;
 
   return (
@@ -294,8 +285,11 @@ export default function LaunchPage() {
 
           {/* ERROR */}
           {error && (
-            <div className="mt-5 border-[3px] border-ink bg-blood text-bone px-4 py-3 font-mono text-[12px] font-extrabold uppercase shadow-[3px_3px_0_0_#0a0a0a]">
-              ⚠ {error}
+            <div className="mt-5 border-[3px] border-ink bg-blood text-bone px-4 py-3 font-mono text-[12px] font-extrabold uppercase shadow-[3px_3px_0_0_#0a0a0a] flex items-center justify-between gap-3 flex-wrap" role="alert" aria-live="assertive">
+              <span>⚠ {error}</span>
+              <button onClick={retryFromError} className="font-mono font-extrabold text-[11px] uppercase px-3 py-1.5 border-[2px] border-bone hover:bg-bone hover:text-ink transition">
+                retry
+              </button>
             </div>
           )}
 
@@ -308,13 +302,18 @@ export default function LaunchPage() {
               </div>
               <div className="p-5">
                 <div className="flex flex-col md:flex-row gap-3">
-                  <input
-                    value={brief}
-                    onChange={(e) => setBrief(e.target.value.slice(0, 80))}
-                    onKeyDown={(e) => e.key === "Enter" && onGenerate()}
-                    placeholder="grumpy cat"
-                    className="flex-1 bg-bone border-[3px] border-ink px-4 py-4 font-display text-[24px] sm:text-[28px] uppercase tracking-tight outline-none focus:bg-acid placeholder:opacity-30"
-                  />
+                  <div className="flex-1">
+                    <label htmlFor="brief-input" className="sr-only">Character brief</label>
+                    <input
+                      id="brief-input"
+                      value={brief}
+                      onChange={(e) => setBrief(e.target.value.slice(0, MAX_BRIEF_LENGTH))}
+                      onKeyDown={(e) => e.key === "Enter" && onGenerate()}
+                      placeholder="grumpy cat"
+                      maxLength={MAX_BRIEF_LENGTH}
+                      className="w-full bg-bone border-[3px] border-ink px-4 py-4 font-display text-[24px] sm:text-[28px] uppercase tracking-tight outline-none focus:bg-acid placeholder:opacity-30"
+                    />
+                  </div>
                   <button
                     onClick={onGenerate}
                     disabled={!brief.trim() || step === "generating"}
@@ -341,17 +340,20 @@ export default function LaunchPage() {
 
           {/* GENERATING SKELETONS */}
           {step === "generating" && (
-            <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="border-[3px] border-ink shadow-[6px_6px_0_0_#0a0a0a] bg-bone p-4 animate-pulse">
-                  <div className="h-44 border-[3px] border-ink bg-sun flex items-center justify-center">
-                    <span className="font-mono font-extrabold text-[12px] uppercase">⟳ rendering face…</span>
+            <div className="mt-8" role="status" aria-label="Generating character candidates">
+              <div className="font-mono text-[11px] font-extrabold uppercase opacity-75 mb-4 text-center">Generating candidates… this takes about 2 seconds</div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="border-[3px] border-ink shadow-[6px_6px_0_0_#0a0a0a] bg-bone p-4 animate-pulse">
+                    <div className="h-44 border-[3px] border-ink bg-sun flex items-center justify-center">
+                      <span className="font-mono font-extrabold text-[12px] uppercase">⟳ rendering face…</span>
+                    </div>
+                    <div className="h-5 mt-4 bg-ink/10 border-[3px] border-ink" />
+                    <div className="h-3 mt-2 bg-ink/10 border-[3px] border-ink w-2/3" />
+                    <div className="h-12 mt-3 bg-ink/10 border-[3px] border-ink" />
                   </div>
-                  <div className="h-5 mt-4 bg-ink/10 border-[3px] border-ink" />
-                  <div className="h-3 mt-2 bg-ink/10 border-[3px] border-ink w-2/3" />
-                  <div className="h-12 mt-3 bg-ink/10 border-[3px] border-ink" />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
@@ -375,6 +377,7 @@ export default function LaunchPage() {
                   <button
                     key={chip}
                     onClick={() => toggleRefine(chip)}
+                    aria-pressed={refine.includes(chip)}
                     className={`font-mono font-extrabold text-[10px] uppercase px-2.5 py-1.5 border-[3px] border-ink shadow-[2px_2px_0_0_#0a0a0a] transition ${
                       refine.includes(chip) ? "bg-acid" : "bg-bone hover:bg-sun"
                     }`}
@@ -408,16 +411,17 @@ export default function LaunchPage() {
                         className={`absolute top-2 right-2 z-10 w-8 h-8 border-[3px] border-ink shadow-[2px_2px_0_0_#0a0a0a] flex items-center justify-center text-[14px] ${
                           c.locked ? "bg-acid" : "bg-bone hover:bg-sun"
                         }`}
+                        aria-label={c.locked ? `Unlock ${c.name} — will regenerate` : `Lock ${c.name} — keep on regenerate`}
                         title={c.locked ? "locked — won't regenerate" : "lock to keep on regenerate"}
                       >
                         {c.locked ? "🔒" : "🔓"}
                       </button>
-                      <button onClick={() => setPicked(i)} className="text-left w-full">
+                      <button onClick={() => setPicked(i)} className="text-left w-full" aria-label={`Pick ${c.name} ($${c.ticker})`}>
                         <div className="flex items-center justify-between bg-ink text-bone px-3 py-2 border-b-[3px] border-ink font-mono font-extrabold text-[11px] uppercase">
                           <span>OPTION 0{i + 1}</span>
                           {active && <span className="text-acid">● PICKED</span>}
                         </div>
-                        <div className="h-44 border-b-[3px] border-ink relative flex items-center justify-center" style={{ background: c.avatar }}>
+                        <div className="h-44 border-b-[3px] border-ink relative flex items-center justify-center" style={{ background: c.avatar }} role="img" aria-label={`${c.name} avatar`}>
                           <span className="text-[64px] drop-shadow-[3px_3px_0_#0a0a0a]">{c.emoji}</span>
                           <span className={`absolute top-3 left-3 border-[3px] border-ink px-2.5 py-1 font-mono font-extrabold text-[10px] shadow-[3px_3px_0_0_#0a0a0a] ${PERS_COLOR[c.personality]}`}>
                             {c.personality}
@@ -428,10 +432,10 @@ export default function LaunchPage() {
                         </div>
                         <div className="p-4">
                           <div className="font-display text-[24px] uppercase tracking-[-.02em] leading-none">{c.name}</div>
-                          <div className="font-mono text-[10px] font-extrabold opacity-60 mt-1.5 uppercase">{c.vibe}</div>
+                          <div className="font-mono text-[10px] font-extrabold opacity-70 mt-1.5 uppercase">{c.vibe}</div>
                           <p className="mt-3 text-[13px] font-semibold leading-snug border-l-[3px] border-ink pl-2.5">{c.bio}</p>
                           <div className="mt-3 bg-sun border-[3px] border-ink p-2.5">
-                            <div className="font-mono text-[9px] font-extrabold uppercase opacity-70 mb-1">first tweet draft</div>
+                            <div className="font-mono text-[9px] font-extrabold uppercase opacity-75 mb-1">first tweet draft</div>
                             <p className="text-[12px] font-semibold leading-snug">{c.firstTweet}</p>
                           </div>
                         </div>
@@ -458,13 +462,15 @@ export default function LaunchPage() {
                             ? { backgroundImage: `url(${customImage})`, backgroundSize: "cover", backgroundPosition: "center" }
                             : { background: chosen.avatar }
                         }
+                        role="img"
+                        aria-label={`${chosen.name} avatar preview`}
                       >
                         {!customImage && chosen.emoji}
                       </div>
                       <div>
                         <label className="btn-brut !bg-acid inline-block cursor-pointer">
                           ⟶ upload png / jpg / gif
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => onImageUpload(e.target.files?.[0])} />
+                          <input type="file" accept={ACCEPTED_IMAGE_ACCEPT} className="hidden" onChange={(e) => onImageUpload(e.target.files?.[0])} />
                         </label>
                         {customImage && (
                           <button
@@ -474,11 +480,11 @@ export default function LaunchPage() {
                             ⟲ revert
                           </button>
                         )}
-                        <div className="mt-3 font-mono text-[10px] font-extrabold uppercase opacity-60">
+                        <div className="mt-3 font-mono text-[10px] font-extrabold uppercase opacity-70">
                           512×512 recommended · max 4MB · square crops best
                         </div>
                         {imgWarn && (
-                          <div className="mt-2 inline-block font-mono text-[10px] font-extrabold uppercase bg-blood text-bone border-[3px] border-ink px-2 py-1">
+                          <div className="mt-2 inline-block font-mono text-[10px] font-extrabold uppercase bg-blood text-bone border-[3px] border-ink px-2 py-1" role="alert">
                             ⚠ {imgWarn}
                           </div>
                         )}
@@ -491,10 +497,10 @@ export default function LaunchPage() {
                     <div className="flex items-center gap-3 px-4 py-3 border-b-[3px] border-ink bg-acid">
                       <span className="font-display text-[22px] bg-ink text-bone px-2.5 leading-none py-1 border-[3px] border-ink">%</span>
                       <h2 className="font-display text-[24px] uppercase tracking-[-.02em] leading-none">Fee splits</h2>
-                      <span className="ml-auto font-mono text-[10px] font-extrabold uppercase opacity-70 hidden md:inline">share creator fees</span>
+                      <span className="ml-auto font-mono text-[10px] font-extrabold uppercase opacity-75 hidden md:inline">share creator fees</span>
                     </div>
                     <div className="p-5">
-                      <p className="font-mono text-[11px] font-extrabold uppercase opacity-70 mb-4">
+                      <p className="font-mono text-[11px] font-extrabold uppercase opacity-75 mb-4">
                         every trade pays a creator fee. split it with artists, devs, kols. payouts stream live, on-chain.
                       </p>
                       <div className="space-y-3">
@@ -503,24 +509,36 @@ export default function LaunchPage() {
                           return (
                             <div key={i} className="grid sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
                               <div className="grid grid-cols-[auto_1fr] gap-2">
-                                <input
-                                  value={row.label}
-                                  onChange={(e) => updateSplit(i, { label: e.target.value.slice(0, 16) })}
-                                  placeholder="role"
-                                  className="bg-bone border-[3px] border-ink px-3 py-2.5 font-mono text-[12px] font-extrabold uppercase outline-none focus:bg-sun w-28"
-                                />
-                                <input
-                                  value={row.wallet}
-                                  onChange={(e) => updateSplit(i, { wallet: e.target.value })}
-                                  placeholder="wallet address or @handle"
-                                  className={`bg-bone border-[3px] px-3 py-2.5 font-mono text-[12px] font-bold outline-none focus:bg-sun ${
-                                    valid ? "border-ink" : "border-blood"
-                                  }`}
-                                  disabled={i === 0}
-                                />
+                                <div>
+                                  <label htmlFor={`split-label-${i}`} className="sr-only">Collaborator role</label>
+                                  <input
+                                    id={`split-label-${i}`}
+                                    value={row.label}
+                                    onChange={(e) => updateSplit(i, { label: sanitizeLabel(e.target.value) })}
+                                    placeholder="role"
+                                    maxLength={MAX_LABEL_LENGTH}
+                                    className="bg-bone border-[3px] border-ink px-3 py-2.5 font-mono text-[12px] font-extrabold uppercase outline-none focus:bg-sun w-28"
+                                  />
+                                </div>
+                                <div>
+                                  <label htmlFor={`split-wallet-${i}`} className="sr-only">Wallet address</label>
+                                  <input
+                                    id={`split-wallet-${i}`}
+                                    value={row.wallet}
+                                    onChange={(e) => updateSplit(i, { wallet: e.target.value })}
+                                    placeholder="wallet address or @handle"
+                                    maxLength={MAX_WALLET_LENGTH}
+                                    className={`w-full bg-bone border-[3px] px-3 py-2.5 font-mono text-[12px] font-bold outline-none focus:bg-sun ${
+                                      valid ? "border-ink" : "border-blood"
+                                    }`}
+                                    disabled={i === 0}
+                                  />
+                                </div>
                               </div>
                               <div className="flex items-center border-[3px] border-ink bg-bone justify-self-start sm:justify-self-auto">
+                                <label htmlFor={`split-pct-${i}`} className="sr-only">Fee percentage</label>
                                 <input
+                                  id={`split-pct-${i}`}
                                   type="number"
                                   min={0}
                                   max={100}
@@ -528,12 +546,13 @@ export default function LaunchPage() {
                                   onChange={(e) => updateSplit(i, { pct: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) })}
                                   className="w-20 px-3 py-2.5 font-display text-[20px] text-right outline-none bg-bone focus:bg-sun"
                                 />
-                                <span className="px-2 font-mono font-extrabold text-[12px] opacity-60">%</span>
+                                <span className="px-2 font-mono font-extrabold text-[12px] opacity-70">%</span>
                               </div>
                               <button
                                 onClick={() => removeSplit(i)}
                                 disabled={i === 0}
                                 className="w-10 h-10 border-[3px] border-ink bg-bone font-display text-[18px] disabled:opacity-30 disabled:cursor-not-allowed hover:bg-hot shadow-[2px_2px_0_0_#0a0a0a] transition"
+                                aria-label={`Remove ${row.label} split`}
                               >
                                 ×
                               </button>
@@ -562,17 +581,18 @@ export default function LaunchPage() {
                     <div className="flex items-center gap-3 px-4 py-3 border-b-[3px] border-ink bg-hot">
                       <span className="font-display text-[22px] bg-ink text-bone px-2.5 leading-none py-1 border-[3px] border-ink">⚙</span>
                       <h2 className="font-display text-[24px] uppercase tracking-[-.02em] leading-none">Dev allocation</h2>
-                      <span className="ml-auto font-mono text-[10px] font-extrabold uppercase opacity-70 hidden md:inline">optional · pump.fun style</span>
+                      <span className="ml-auto font-mono text-[10px] font-extrabold uppercase opacity-75 hidden md:inline">optional · pump.fun style</span>
                     </div>
                     <div className="p-5 grid lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
                       <div>
                         <div className="flex justify-between items-baseline mb-2">
-                          <span className="font-mono text-[11px] font-extrabold uppercase opacity-70">your buy at launch</span>
+                          <label htmlFor="dev-buy-slider" className="font-mono text-[11px] font-extrabold uppercase opacity-75">your buy at launch</label>
                           <span className="font-display text-[28px] sm:text-[32px] tracking-tight">
-                            {devBuy.toFixed(2)} <span className="text-[14px] sm:text-[16px] opacity-60">SOL</span>
+                            {devBuy.toFixed(2)} <span className="text-[14px] sm:text-[16px] opacity-70">SOL</span>
                           </span>
                         </div>
                         <input
+                          id="dev-buy-slider"
                           type="range"
                           min={0}
                           max={MAX_DEV_SOL}
@@ -581,7 +601,7 @@ export default function LaunchPage() {
                           onChange={(e) => setDevBuy(parseFloat(e.target.value))}
                           className="w-full accent-ink h-2"
                         />
-                        <div className="flex justify-between font-mono text-[10px] font-extrabold opacity-60 mt-1">
+                        <div className="flex justify-between font-mono text-[10px] font-extrabold opacity-70 mt-1">
                           <span>0 SOL</span>
                           <span>max {MAX_DEV_SOL} SOL</span>
                         </div>
@@ -605,7 +625,7 @@ export default function LaunchPage() {
                           <div className="font-display text-[24px] sm:text-[28px] tracking-tight leading-none">
                             {devTokens.toLocaleString()}
                           </div>
-                          <div className="font-mono text-[10px] font-extrabold uppercase opacity-60 mt-1">
+                          <div className="font-mono text-[10px] font-extrabold uppercase opacity-70 mt-1">
                             ${chosen.ticker} · {devPct.toFixed(2)}% of supply
                           </div>
                           <div className={`mt-3 font-mono text-[10px] font-extrabold uppercase border-[3px] border-ink px-2 py-1.5 ${devWarn ? "bg-blood text-bone" : "bg-acid"}`}>
@@ -636,15 +656,15 @@ export default function LaunchPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="font-display text-[20px] sm:text-[22px] uppercase leading-none tracking-[-.02em] truncate">
-                            {chosen.name} <span className="font-mono text-[12px] opacity-70">${chosen.ticker}</span>
+                            {chosen.name} <span className="font-mono text-[12px] opacity-75">${chosen.ticker}</span>
                           </div>
-                          <div className="font-mono text-[10px] font-extrabold uppercase opacity-70 mt-1">
+                          <div className="font-mono text-[10px] font-extrabold uppercase opacity-75 mt-1">
                             ≈ {totalCost.toFixed(3)} SOL · dev {devBuy.toFixed(2)} ({devPct.toFixed(1)}%)
                           </div>
                         </div>
                       </>
                     ) : (
-                      <div className="font-mono text-[12px] font-extrabold uppercase opacity-70">⤷ pick one of the 4 to continue</div>
+                      <div className="font-mono text-[12px] font-extrabold uppercase opacity-75">⤷ pick one of the 4 to continue</div>
                     )}
                   </div>
                   <button
@@ -662,7 +682,7 @@ export default function LaunchPage() {
           {/* LAUNCHING */}
           {step === "launching" && chosen && (
             <div className="mt-12 border-[3px] border-ink shadow-[8px_8px_0_0_#0a0a0a] bg-bone p-6 sm:p-10">
-              <div className="font-mono text-[11px] font-extrabold uppercase opacity-70 mb-2">⟳ {progress.label}…</div>
+              <div className="font-mono text-[11px] font-extrabold uppercase opacity-75 mb-2" role="status">⟳ {progress.label}…</div>
               <div className="font-display text-[36px] sm:text-[48px] uppercase tracking-[-.03em]">birthing {chosen.name}</div>
               <div className="mt-6 max-w-md bar h-[18px] border-[3px] border-ink bg-bone relative overflow-hidden">
                 <i style={{ width: `${((progress.step + 1) / 5) * 100}%`, transition: "width .5s ease" }} />
@@ -699,6 +719,8 @@ export default function LaunchPage() {
                       ? { backgroundImage: `url(${customImage})`, backgroundSize: "cover", backgroundPosition: "center" }
                       : { background: chosen.avatar }
                   }
+                  role="img"
+                  aria-label={`${chosen.name} avatar`}
                 >
                   {!customImage && chosen.emoji}
                 </div>
@@ -711,7 +733,7 @@ export default function LaunchPage() {
                   </div>
 
                   <div className="mt-4 border-[3px] border-ink bg-bone p-3">
-                    <div className="font-mono text-[10px] font-extrabold uppercase opacity-60">Token address</div>
+                    <div className="font-mono text-[10px] font-extrabold uppercase opacity-70">Token address</div>
                     <div className="font-mono text-[11px] sm:text-[12px] font-bold mt-1 break-all">{launchedToken.addr}</div>
                   </div>
 
@@ -759,57 +781,67 @@ export default function LaunchPage() {
   );
 }
 
-function ReviewModal({ chosen, customImage, devBuy, devTokens, devPct, totalCost, splits, balance, onCancel, onConfirm }: any) {
+function ReviewModal({ chosen, customImage, devBuy, devTokens, devPct, totalCost, splits, balance, onCancel, onConfirm }: ReviewModalProps) {
   return (
-    <div className="fixed inset-0 z-[100] bg-ink/70 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-4 overflow-y-auto" onClick={onCancel}>
-      <div className="w-full max-w-lg bg-bone border-[3px] border-ink shadow-[8px_8px_0_0_#0a0a0a] my-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-ink text-bone">
-          <div className="font-display text-[18px] uppercase tracking-tight">Review & sign</div>
-          <button onClick={onCancel} className="w-7 h-7 border-[2px] border-bone hover:bg-hot transition font-display">×</button>
+    <div
+      className="fixed inset-0 z-[100] bg-ink/70 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-4 overflow-y-auto"
+      onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="review-modal-title"
+    >
+      <FocusTrap onClose={onCancel}>
+        <div className="w-full max-w-lg bg-bone border-[3px] border-ink shadow-[8px_8px_0_0_#0a0a0a] my-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-ink text-bone">
+            <div id="review-modal-title" className="font-display text-[18px] uppercase tracking-tight">Review & sign</div>
+            <button onClick={onCancel} className="w-7 h-7 border-[2px] border-bone hover:bg-hot transition font-display" aria-label="Close review dialog">×</button>
+          </div>
+          <div className="p-5 max-h-[70vh] overflow-y-auto">
+            <div className="flex items-center gap-4 mb-5">
+              <div
+                className="w-20 h-20 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] flex items-center justify-center text-[40px] flex-none"
+                style={customImage ? { backgroundImage: `url(${customImage})`, backgroundSize: "cover" } : { background: chosen.avatar }}
+                role="img"
+                aria-label={`${chosen.name} avatar`}
+              >
+                {!customImage && chosen.emoji}
+              </div>
+              <div className="min-w-0">
+                <div className="font-display text-[26px] uppercase leading-none tracking-[-.02em]">{chosen.name}</div>
+                <div className="font-mono text-[11px] font-extrabold opacity-70 mt-1">${chosen.ticker} · {chosen.personality}</div>
+              </div>
+            </div>
+
+            <div className="border-[3px] border-ink divide-y-[3px] divide-ink">
+              <Row k="Launch fee" v={`${LAUNCH_FEE.toFixed(3)} SOL`} />
+              <Row k="Dev buy" v={`${devBuy.toFixed(3)} SOL`} sub={`${devTokens.toLocaleString()} $${chosen.ticker} (${devPct.toFixed(2)}%)`} />
+              <Row k="Network" v={`~${NETWORK_FEE} SOL`} />
+              <Row k="Total" v={`${totalCost.toFixed(4)} SOL`} big />
+            </div>
+
+            <div className="mt-4 border-[3px] border-ink bg-bone">
+              <div className="px-3 py-2 border-b-[3px] border-ink bg-sun font-mono font-extrabold text-[10px] uppercase">Fee splits</div>
+              <div className="p-3 space-y-1.5">
+                {splits.map((s, i) => (
+                  <div key={i} className="flex justify-between font-mono text-[11px] font-bold">
+                    <span className="opacity-75 uppercase">{s.label}</span>
+                    <span>{s.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 font-mono text-[10px] font-extrabold uppercase opacity-75">
+              wallet balance · {balance.toFixed(2)} SOL
+            </div>
+
+            <div className="mt-5 flex gap-3 flex-wrap">
+              <button onClick={onConfirm} className="btn-brut !bg-acid flex-1">⟶ sign & launch</button>
+              <button onClick={onCancel} className="btn-brut">cancel</button>
+            </div>
+          </div>
         </div>
-        <div className="p-5 max-h-[70vh] overflow-y-auto">
-          <div className="flex items-center gap-4 mb-5">
-            <div
-              className="w-20 h-20 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] flex items-center justify-center text-[40px] flex-none"
-              style={customImage ? { backgroundImage: `url(${customImage})`, backgroundSize: "cover" } : { background: chosen.avatar }}
-            >
-              {!customImage && chosen.emoji}
-            </div>
-            <div className="min-w-0">
-              <div className="font-display text-[26px] uppercase leading-none tracking-[-.02em]">{chosen.name}</div>
-              <div className="font-mono text-[11px] font-extrabold opacity-60 mt-1">${chosen.ticker} · {chosen.personality}</div>
-            </div>
-          </div>
-
-          <div className="border-[3px] border-ink divide-y-[3px] divide-ink">
-            <Row k="Launch fee" v="0.020 SOL" />
-            <Row k="Dev buy" v={`${devBuy.toFixed(3)} SOL`} sub={`${devTokens.toLocaleString()} $${chosen.ticker} (${devPct.toFixed(2)}%)`} />
-            <Row k="Network" v="~0.0008 SOL" />
-            <Row k="Total" v={`${totalCost.toFixed(4)} SOL`} big />
-          </div>
-
-          <div className="mt-4 border-[3px] border-ink bg-bone">
-            <div className="px-3 py-2 border-b-[3px] border-ink bg-sun font-mono font-extrabold text-[10px] uppercase">Fee splits</div>
-            <div className="p-3 space-y-1.5">
-              {splits.map((s: any, i: number) => (
-                <div key={i} className="flex justify-between font-mono text-[11px] font-bold">
-                  <span className="opacity-70 uppercase">{s.label}</span>
-                  <span>{s.pct}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 font-mono text-[10px] font-extrabold uppercase opacity-70">
-            wallet balance · {balance.toFixed(2)} SOL
-          </div>
-
-          <div className="mt-5 flex gap-3 flex-wrap">
-            <button onClick={onConfirm} className="btn-brut !bg-acid flex-1">⟶ sign & launch</button>
-            <button onClick={onCancel} className="btn-brut">cancel</button>
-          </div>
-        </div>
-      </div>
+      </FocusTrap>
     </div>
   );
 }
@@ -818,7 +850,7 @@ function Row({ k, v, sub, big }: { k: string; v: string; sub?: string; big?: boo
   return (
     <div className="flex justify-between items-center px-4 py-3">
       <div>
-        <div className="font-mono text-[11px] font-extrabold uppercase opacity-70">{k}</div>
+        <div className="font-mono text-[11px] font-extrabold uppercase opacity-75">{k}</div>
         {sub && <div className="font-mono text-[10px] opacity-50 mt-0.5">{sub}</div>}
       </div>
       <div className={`font-display ${big ? "text-[24px]" : "text-[16px]"}`}>{v}</div>
@@ -834,26 +866,18 @@ function Stepper({ step }: { step: Step }) {
   ];
   const isActive = (id: Step | Step[]) => (Array.isArray(id) ? id.includes(step) : id === step);
   return (
-    <div className="flex gap-3 flex-wrap">
+    <nav className="flex gap-3 flex-wrap" aria-label="Launch progress">
       {steps.map((s, i) => (
         <div
           key={i}
           className={`font-mono font-extrabold text-[11px] uppercase px-3 py-2 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] ${
             isActive(s.id) ? "bg-acid" : "bg-bone opacity-60"
           }`}
+          aria-current={isActive(s.id) ? "step" : undefined}
         >
           {s.label}
         </div>
       ))}
-    </div>
-  );
-}
-
-function Stat({ k, v, mid }: { k: string; v: string; mid?: boolean }) {
-  return (
-    <div className={`p-3 ${mid ? "border-l-[3px] border-ink" : ""}`}>
-      <div className="font-mono text-[10px] font-extrabold uppercase opacity-60">{k}</div>
-      <div className="font-display text-[18px] mt-0.5">{v}</div>
-    </div>
+    </nav>
   );
 }

@@ -1,8 +1,17 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Archivo_Black, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { WalletProvider } from "./_components/WalletProvider";
+import { websiteJsonLd } from "./_lib/jsonld";
+import { BASE_URL } from "./_lib/constants";
+
+const archivoBlack = Archivo_Black({ weight: "400", subsets: ["latin"], variable: "--font-display", display: "swap" });
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: "ALIVE — Memes That Refuse To Die",
   description: "Living memecoin launchpad. Every token is a self-regenerating AI character that posts, beefs, allies and survives. Pump.fun solved speed of launch — ALIVE solves longevity.",
   openGraph: {
@@ -17,17 +26,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${archivoBlack.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@500;700&display=swap"
-          rel="stylesheet"
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd()) }}
         />
       </head>
       <body>
-        <WalletProvider>{children}</WalletProvider>
+        <WalletProvider>
+          <Suspense>{children}</Suspense>
+        </WalletProvider>
       </body>
     </html>
   );

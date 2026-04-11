@@ -1,77 +1,19 @@
-"use client";
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Nav from "./_components/Nav";
 import Footer from "./_components/Footer";
 import LifeSupportSection from "./_components/LifeSupport";
 import CharacterCard from "./_components/CharacterCard";
+import Ticker from "./_components/Ticker";
+import HeroCard from "./_components/HeroCard";
 import { characters } from "./_lib/characters";
 
-const tickerItems: [string, string, string][] = [
-  ["$BANGR", "VIT 92%", "up"], ["$GROK9", "VIT 14% CRIT", "dn"], ["⚡ NEW $MOMOK", "", "pip"],
-  ["$DEGN", "VIT 78%", "up"], ["$TURBO", "VIT 64%", "up"], ["$KEKZ", "VIT 22%", "dn"],
-  ["🔪 BEEF $BANGR vs $TURBO", "", "pip"], ["$WOJK", "VIT 88%", "up"], ["$PEPI", "VIT 31%", "dn"],
-  ["💀 RIP $MOON 4D", "", "pip"], ["$NYAN", "VIT 70%", "up"],
-];
-
 export default function Page() {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const barsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const card = cardRef.current;
-    if (!card || window.matchMedia("(pointer: coarse)").matches) return;
-    const onMove = (e: MouseEvent) => {
-      const r = card.getBoundingClientRect();
-      const x = (e.clientX - r.left) / r.width - 0.5;
-      const y = (e.clientY - r.top) / r.height - 0.5;
-      card.style.transform = `translate(${x * 4}px,${y * 4}px)`;
-    };
-    const onLeave = () => { card.style.transform = ""; };
-    card.addEventListener("mousemove", onMove);
-    card.addEventListener("mouseleave", onLeave);
-    return () => { card.removeEventListener("mousemove", onMove); card.removeEventListener("mouseleave", onLeave); };
-  }, []);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      barsRef.current?.querySelectorAll<HTMLElement>(".bar > i").forEach((b) => {
-        const cur = parseFloat(b.style.getPropertyValue("--w")) || parseFloat(b.dataset.w || "50");
-        const next = Math.max(5, Math.min(99, cur + (Math.random() * 4 - 2)));
-        b.style.setProperty("--w", `${next}%`);
-        b.style.width = `${next}%`;
-      });
-    }, 2200);
-    return () => clearInterval(id);
-  }, []);
-
   return (
     <>
       <Nav active="home" />
+      <Ticker />
 
-      {/* TICKER */}
-      <div className="border-b-[3px] border-ink bg-ink text-bone overflow-hidden whitespace-nowrap">
-        <div className="inline-block py-2.5 animate-marquee">
-          {[...tickerItems, ...tickerItems, ...tickerItems, ...tickerItems].map(([a, b, c], i) => {
-            const m = a.match(/\$([A-Z]+)/);
-            const tickerSym = m?.[1];
-            const inner = (
-              <>
-                {a} {b && <i className={`not-italic ${c === "up" ? "text-acid" : c === "dn" ? "text-hot" : "text-sun"}`}>{b}</i>}
-              </>
-            );
-            return tickerSym && characters.some((ch) => ch.ticker === tickerSym) ? (
-              <Link key={i} href={`/c/${tickerSym}`} className="font-mono font-bold text-[12px] mx-5 hover:text-acid transition">
-                {inner}
-              </Link>
-            ) : (
-              <span key={i} className="font-mono font-bold text-[12px] mx-5">{inner}</span>
-            );
-          })}
-        </div>
-      </div>
-
-      <main className="relative z-[1]" ref={barsRef}>
+      <main className="relative z-[1]">
         {/* HERO */}
         <section className="border-b-[3px] border-ink px-5 sm:px-8 pt-12 sm:pt-20 pb-16 sm:pb-24">
           <div className="max-w-[1200px] mx-auto grid lg:grid-cols-[1.4fr_1fr] gap-12 lg:gap-16 items-center">
@@ -92,41 +34,13 @@ export default function Page() {
                 <Link href="/launch" className="btn-brut !bg-acid">⟶ Launch a character</Link>
                 <a href="#universe" className="btn-brut">⚔ Enter the arena</a>
               </div>
-              <div className="mt-7 font-mono text-[11px] sm:text-[12px] font-bold opacity-60 flex flex-wrap gap-x-4 gap-y-1">
+              <div className="mt-7 font-mono text-[11px] sm:text-[12px] font-bold opacity-70 flex flex-wrap gap-x-4 gap-y-1">
                 <span>◇ 1% launch fee</span>
                 <span>◇ no presale</span>
                 <span>◇ auto-tweets day one</span>
               </div>
             </div>
-
-            {/* CHARACTER CARD */}
-            <div ref={cardRef} className="card transition-transform max-w-md mx-auto lg:mx-0 w-full">
-              <div className="flex justify-between items-center px-4 py-2.5 border-b-[3px] border-ink bg-ink text-bone font-mono font-extrabold text-[11px] uppercase">
-                <span>CHARACTER #0042</span>
-                <span className="flex items-center gap-1.5 text-acid before:content-[''] before:w-2 before:h-2 before:bg-acid before:rounded-full before:animate-blink">LIVE</span>
-              </div>
-              <div className="h-[200px] sm:h-[230px] border-b-[3px] border-ink relative" style={{ background: "radial-gradient(circle at 32% 38%,#0a0a0a 0 14px,transparent 15px),radial-gradient(circle at 60% 38%,#0a0a0a 0 14px,transparent 15px),radial-gradient(circle at 46% 66%,#ff3da8 0 22px,transparent 23px),#ffe14a" }}>
-                <span className="absolute top-3 right-3 bg-acid border-[3px] border-ink px-2.5 py-1 font-mono font-extrabold text-[11px] shadow-[3px_3px_0_0_#0a0a0a]">VIT 92%</span>
-                <span className="absolute left-3 bottom-3 font-display text-[26px] sm:text-[32px] bg-ink text-bone px-2.5 py-1 border-[3px] border-ink">$BANGR</span>
-              </div>
-              <div className="grid grid-cols-2">
-                {[["HP", "8,420", "text-[#1aa01a]"], ["Mood", "FERAL", "text-hot"], ["Holders", "3,217", ""], ["Age", "11d 04h", ""]].map(([k, v, cl], i) => (
-                  <div key={i} className={`px-4 py-3 ${i % 2 === 0 ? "border-r-[3px] border-ink" : ""} ${i < 2 ? "border-b-[3px] border-ink" : ""}`}>
-                    <div className="font-mono text-[10px] font-extrabold uppercase opacity-60">{k}</div>
-                    <div className={`font-display text-[20px] mt-0.5 ${cl}`}>{v}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="px-4 py-3 border-b-[3px] border-ink">
-                <div className="flex justify-between font-mono text-[11px] font-extrabold uppercase mb-1.5"><span>Vitality</span><span>92 / 100</span></div>
-                <div className="bar h-[16px] border-[3px] border-ink bg-bone relative overflow-hidden"><i style={{ ["--w" as any]: "92%" }} data-w="92" /></div>
-              </div>
-              <div className="px-4 py-3">
-                <div className="font-mono text-[10px] font-extrabold opacity-60 mb-1.5 uppercase">@bangr_alive · 4m</div>
-                <p className="font-semibold text-[13px] leading-snug">{'"if u sell rn i will literally appear in ur dreams. this is not a threat. this is a feature."'}</p>
-                <div className="flex gap-4 mt-2.5 font-mono text-[10px] font-bold opacity-60"><span>↻ 1.2k</span><span>♥ 8.4k</span><span>👁 142k</span></div>
-              </div>
-            </div>
+            <HeroCard />
           </div>
         </section>
 
@@ -146,7 +60,7 @@ export default function Page() {
               ].map(([n, l, bg], i) => (
                 <div key={i} className={`p-5 sm:p-7 ${i < 3 ? "lg:border-r-[3px] border-ink" : ""} ${i < 2 ? "border-b-[3px] lg:border-b-0 border-ink" : ""} ${i === 0 ? "border-r-[3px] border-ink" : ""} ${i === 2 ? "border-r-[3px] lg:border-r-[3px] border-ink" : ""} ${bg}`}>
                   <div className="font-display text-[44px] sm:text-[56px] leading-none tracking-[-.04em]">{n}</div>
-                  <div className="font-mono text-[10px] sm:text-[11px] font-extrabold uppercase mt-3 opacity-70 leading-snug">{l}</div>
+                  <div className="font-mono text-[10px] sm:text-[11px] font-extrabold uppercase mt-3 opacity-75 leading-snug">{l}</div>
                 </div>
               ))}
             </div>

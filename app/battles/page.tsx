@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import Nav from "../_components/Nav";
 import Footer from "../_components/Footer";
 import { characters } from "../_lib/characters";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Battles — ALIVE",
+  description: "Weekly arena battles. Two creatures enter, one survives. Holders stake vitality on their character.",
+};
 
 const battles = [
   { id: 1, a: characters[0], b: characters[3], pool: "12.4 SOL", status: "LIVE", round: 3, votes: { a: 62, b: 38 } },
@@ -43,25 +49,25 @@ export default function BattlesPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center">
                     {/* A */}
-                    <Link href={`/c/${b.a.ticker}`} className="p-5 hover:bg-sun transition flex items-center gap-4 border-b-[3px] md:border-b-0 md:border-r-[3px] border-ink">
-                      <div className="w-16 h-16 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] flex items-center justify-center text-[28px]" style={{ background: b.a.ava }}>
+                    <Link href={`/c/${b.a.ticker}`} className="p-5 hover:bg-sun transition flex items-center gap-4 border-b-[3px] md:border-b-0 md:border-r-[3px] border-ink" aria-label={`View ${b.a.name} profile`}>
+                      <div className="w-16 h-16 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] flex items-center justify-center text-[28px]" style={{ background: b.a.ava }} role="img" aria-label={`${b.a.name} avatar`}>
                         {b.a.emoji}
                       </div>
                       <div>
                         <div className="font-display text-[22px] uppercase leading-none tracking-[-.02em]">{b.a.name}</div>
-                        <div className="font-mono text-[11px] font-extrabold opacity-60 mt-1">${b.a.ticker} · vit {b.a.vit}%</div>
+                        <div className="font-mono text-[11px] font-extrabold opacity-70 mt-1">${b.a.ticker} · vit {b.a.vit}%</div>
                       </div>
                     </Link>
                     {/* VS */}
                     <div className="px-5 py-2 md:py-5 font-display text-[40px] text-center bg-bone md:border-r-[3px] border-ink border-b-[3px] md:border-b-0">VS</div>
                     {/* B */}
-                    <Link href={`/c/${b.b.ticker}`} className="p-5 hover:bg-sun transition flex items-center gap-4 md:flex-row-reverse md:text-right">
-                      <div className="w-16 h-16 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] flex items-center justify-center text-[28px]" style={{ background: b.b.ava }}>
+                    <Link href={`/c/${b.b.ticker}`} className="p-5 hover:bg-sun transition flex items-center gap-4 md:flex-row-reverse md:text-right" aria-label={`View ${b.b.name} profile`}>
+                      <div className="w-16 h-16 border-[3px] border-ink shadow-[3px_3px_0_0_#0a0a0a] flex items-center justify-center text-[28px]" style={{ background: b.b.ava }} role="img" aria-label={`${b.b.name} avatar`}>
                         {b.b.emoji}
                       </div>
                       <div>
                         <div className="font-display text-[22px] uppercase leading-none tracking-[-.02em]">{b.b.name}</div>
-                        <div className="font-mono text-[11px] font-extrabold opacity-60 mt-1">${b.b.ticker} · vit {b.b.vit}%</div>
+                        <div className="font-mono text-[11px] font-extrabold opacity-70 mt-1">${b.b.ticker} · vit {b.b.vit}%</div>
                       </div>
                     </Link>
                   </div>
@@ -76,8 +82,8 @@ export default function BattlesPage() {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 border-t-[3px] border-ink">
-                    <button className="font-display text-[16px] uppercase py-3.5 bg-bone hover:bg-acid transition border-r-[3px] border-ink">⟶ back ${b.a.ticker}</button>
-                    <button className="font-display text-[16px] uppercase py-3.5 bg-bone hover:bg-hot transition">⟶ back ${b.b.ticker}</button>
+                    <button className="font-display text-[16px] uppercase py-3.5 bg-bone hover:bg-acid transition border-r-[3px] border-ink" aria-label={`Back ${b.a.name} in this battle`}>⟶ back ${b.a.ticker}</button>
+                    <button className="font-display text-[16px] uppercase py-3.5 bg-bone hover:bg-hot transition" aria-label={`Back ${b.b.name} in this battle`}>⟶ back ${b.b.ticker}</button>
                   </div>
                 </div>
               );

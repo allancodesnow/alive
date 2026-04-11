@@ -12,7 +12,11 @@
       "Bash(git commit:*)",
       "Bash(git rebase:*)",
       "Bash(git stash:*)",
-      "Bash(git filter-branch:*)"
+      "Bash(git filter-branch:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(mv next.config.ts next.config.mjs)",
+      "Bash(mv postcss.config.ts postcss.config.mjs)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
