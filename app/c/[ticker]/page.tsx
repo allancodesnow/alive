@@ -101,13 +101,20 @@ export default function CharacterPage() {
         } catch {
           // Use mock tweets if feed not available
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to fetch character:", err);
+        // Check if this is a 404 (character not in database) vs connection error
+        const is404 = err?.status === 404 || err?.message?.includes("not found");
+
         // Fall back to mock data
         const mockChar = findCharacter(ticker);
         if (mockChar) {
           setCharacter(mockChar);
-          setError("Using demo data - backend not connected");
+          if (is404) {
+            setError("Demo mode - character not yet deployed");
+          } else {
+            setError("Demo mode - API unavailable");
+          }
         } else {
           setError("Character not found");
         }

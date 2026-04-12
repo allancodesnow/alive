@@ -45,9 +45,13 @@ async function fetcher<T>(endpoint: string, options: FetchOptions = {}): Promise
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-      console.error(`[API] Error ${response.status}:`, error);
-      throw new Error(error.message || `API error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+      console.error(`[API] Error ${response.status}:`, errorData);
+      // Backend uses "error" key, but also support "message" for flexibility
+      const errorMessage = errorData.error || errorData.message || `API error: ${response.status}`;
+      const err = new Error(errorMessage);
+      (err as any).status = response.status;
+      throw err;
     }
 
     const data = await response.json();
