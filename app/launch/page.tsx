@@ -6,7 +6,7 @@ import Footer from "../_components/Footer";
 import Stat from "../_components/Stat";
 import FocusTrap from "../_components/FocusTrap";
 import { useWallet } from "../_components/WalletProvider";
-import { devTokensFromSol, devPctFromSol, MAX_DEV_SOL, isValidWalletInput } from "../_lib/curve";
+import { devTokensFromOKB, devPctFromOKB, MAX_DEV_OKB, isValidWalletInput } from "../_lib/curve";
 import { validateImageFile, sanitizeLabel } from "../_lib/validation";
 import { MAX_BRIEF_LENGTH, MAX_LABEL_LENGTH, MAX_WALLET_LENGTH, LAUNCH_FEE, NETWORK_FEE, ACCEPTED_IMAGE_ACCEPT, MIN_IMAGE_DIM } from "../_lib/constants";
 import type { Personality, Candidate, Step, Split, ReviewModalProps } from "../_lib/types";
@@ -128,8 +128,8 @@ export default function LaunchPage() {
   const splitOk = totalSplit === 100;
   const splitsValid = splits.every((s, i) => i === 0 || isValidWalletInput(s.wallet));
 
-  const devTokens = useMemo(() => devTokensFromSol(devBuy), [devBuy]);
-  const devPct = useMemo(() => devPctFromSol(devBuy), [devBuy]);
+  const devTokens = useMemo(() => devTokensFromOKB(devBuy), [devBuy]);
+  const devPct = useMemo(() => devPctFromOKB(devBuy), [devBuy]);
   const devWarn = devPct > 4;
 
   const totalCost = useMemo(() => LAUNCH_FEE + devBuy + NETWORK_FEE, [devBuy]);
@@ -205,7 +205,7 @@ export default function LaunchPage() {
     if (!wallet) return openModal();
     if (!splitOk) return setError("Fee splits must total 100%.");
     if (!splitsValid) return setError("One of the wallet addresses is invalid.");
-    if (insufficientFunds) return setError("Insufficient SOL in wallet.");
+    if (insufficientFunds) return setError("Insufficient OKB in wallet.");
     setError(null);
     setStep("review");
   };
@@ -588,22 +588,22 @@ export default function LaunchPage() {
                         <div className="flex justify-between items-baseline mb-2">
                           <label htmlFor="dev-buy-slider" className="font-mono text-[11px] font-extrabold uppercase opacity-75">your buy at launch</label>
                           <span className="font-display text-[28px] sm:text-[32px] tracking-tight">
-                            {devBuy.toFixed(2)} <span className="text-[14px] sm:text-[16px] opacity-70">SOL</span>
+                            {devBuy.toFixed(2)} <span className="text-[14px] sm:text-[16px] opacity-70">OKB</span>
                           </span>
                         </div>
                         <input
                           id="dev-buy-slider"
                           type="range"
                           min={0}
-                          max={MAX_DEV_SOL}
+                          max={MAX_DEV_OKB}
                           step={0.05}
                           value={devBuy}
                           onChange={(e) => setDevBuy(parseFloat(e.target.value))}
                           className="w-full accent-ink h-2"
                         />
                         <div className="flex justify-between font-mono text-[10px] font-extrabold opacity-70 mt-1">
-                          <span>0 SOL</span>
-                          <span>max {MAX_DEV_SOL} SOL</span>
+                          <span>0 OKB</span>
+                          <span>max {MAX_DEV_OKB} OKB</span>
                         </div>
                         <div className="flex flex-wrap gap-2 mt-4">
                           {[0, 0.25, 0.5, 1, 2, 5].map((v) => (
@@ -614,7 +614,7 @@ export default function LaunchPage() {
                                 devBuy === v ? "bg-acid" : "bg-bone hover:bg-sun"
                               }`}
                             >
-                              {v === 0 ? "none" : `${v} SOL`}
+                              {v === 0 ? "none" : `${v} OKB`}
                             </button>
                           ))}
                         </div>
@@ -659,7 +659,7 @@ export default function LaunchPage() {
                             {chosen.name} <span className="font-mono text-[12px] opacity-75">${chosen.ticker}</span>
                           </div>
                           <div className="font-mono text-[10px] font-extrabold uppercase opacity-75 mt-1">
-                            ≈ {totalCost.toFixed(3)} SOL · dev {devBuy.toFixed(2)} ({devPct.toFixed(1)}%)
+                            ≈ {totalCost.toFixed(3)} OKB · dev {devBuy.toFixed(2)} ({devPct.toFixed(1)}%)
                           </div>
                         </div>
                       </>
@@ -813,10 +813,10 @@ function ReviewModal({ chosen, customImage, devBuy, devTokens, devPct, totalCost
             </div>
 
             <div className="border-[3px] border-ink divide-y-[3px] divide-ink">
-              <Row k="Launch fee" v={`${LAUNCH_FEE.toFixed(3)} SOL`} />
-              <Row k="Dev buy" v={`${devBuy.toFixed(3)} SOL`} sub={`${devTokens.toLocaleString()} $${chosen.ticker} (${devPct.toFixed(2)}%)`} />
-              <Row k="Network" v={`~${NETWORK_FEE} SOL`} />
-              <Row k="Total" v={`${totalCost.toFixed(4)} SOL`} big />
+              <Row k="Launch fee" v={`${LAUNCH_FEE.toFixed(3)} OKB`} />
+              <Row k="Dev buy" v={`${devBuy.toFixed(3)} OKB`} sub={`${devTokens.toLocaleString()} $${chosen.ticker} (${devPct.toFixed(2)}%)`} />
+              <Row k="Network" v={`~${NETWORK_FEE} OKB`} />
+              <Row k="Total" v={`${totalCost.toFixed(4)} OKB`} big />
             </div>
 
             <div className="mt-4 border-[3px] border-ink bg-bone">
@@ -832,7 +832,7 @@ function ReviewModal({ chosen, customImage, devBuy, devTokens, devPct, totalCost
             </div>
 
             <div className="mt-4 font-mono text-[10px] font-extrabold uppercase opacity-75">
-              wallet balance · {balance.toFixed(2)} SOL
+              wallet balance · {balance.toFixed(2)} OKB
             </div>
 
             <div className="mt-5 flex gap-3 flex-wrap">
