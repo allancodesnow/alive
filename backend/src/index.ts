@@ -70,8 +70,10 @@ const port = parseInt(process.env.PORT || "3001");
 
 console.log(`🧬 ALIVE API starting on port ${port}`);
 
-export default {
+const server = Bun.serve({
   port,
-  hostname: "0.0.0.0", // Required for Railway to route traffic
+  hostname: "0.0.0.0",
   fetch: app.fetch,
-};
+});
+
+console.log(`Started server: http://${server.hostname}:${server.port}`);
