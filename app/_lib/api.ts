@@ -23,7 +23,8 @@ type FetchOptions = RequestInit & {
 async function fetcher<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { params, ...init } = options;
 
-  let url = `${getApiUrl()}${endpoint}`;
+  const apiUrl = getApiUrl();
+  let url = `${apiUrl}${endpoint}`;
   if (params) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -32,20 +33,30 @@ async function fetcher<T>(endpoint: string, options: FetchOptions = {}): Promise
     url += `?${searchParams.toString()}`;
   }
 
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
-  });
+  console.log(`[API] Fetching: ${url}`);
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-    throw new Error(error.message || `API error: ${response.status}`);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...init.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+      console.error(`[API] Error ${response.status}:`, error);
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`[API] Success:`, data);
+    return data;
+  } catch (err) {
+    console.error(`[API] Fetch failed for ${url}:`, err);
+    throw err;
   }
-
-  return response.json();
 }
 
 // ============ Character API ============
