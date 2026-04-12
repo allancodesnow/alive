@@ -1,137 +1,216 @@
-/**
- * DEMO WALLET PROVIDER
- * Simulated wallet for UI demonstration only.
- * No real cryptographic operations or signature verification occurs.
- * For production, replace with @solana/wallet-adapter-react.
- */
 "use client";
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { parseWalletFromStorage } from "../_lib/validation";
-import FocusTrap from "./FocusTrap";
 
-type Wallet = { address: string; balance: number } | null;
-type Ctx = {
-  wallet: Wallet;
-  connecting: boolean;
-  connect: () => Promise<void>;
-  disconnect: () => void;
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { WagmiProvider, useAccount, useBalance, useDisconnect } from "wagmi";
+import {
+  RainbowKitProvider,
+  ConnectButton,
+  lightTheme,
+} from "@rainbow-me/rainbowkit";
+import "@rainbow-me/rainbowkit/styles.css";
+import { config, xLayer } from "../_lib/wagmi";
+import { createContext, useContext, useState, useCallback } from "react";
+
+const queryClient = new QueryClient();
+
+// Context for modal control and wallet state
+type WalletCtx = {
+  address: `0x${string}` | undefined;
+  balance: string | undefined;
+  isConnected: boolean;
+  isConnecting: boolean;
   openModal: () => void;
   closeModal: () => void;
   modalOpen: boolean;
+  disconnect: () => void;
 };
 
-const WalletCtx = createContext<Ctx | null>(null);
+const WalletContext = createContext<WalletCtx | null>(null);
 
-// DEMO ONLY: generates a fake wallet address for preview purposes
-const fakeAddr = () =>
-  "ALV" + Math.random().toString(36).slice(2, 10).toUpperCase() + "x" + Math.random().toString(36).slice(2, 8);
+export function useWallet() {
+  const ctx = useContext(WalletContext);
+  if (!ctx) throw new Error("useWallet must be used within WalletProvider");
 
-export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [wallet, setWallet] = useState<Wallet>(null);
-  const [connecting, setConnecting] = useState(false);
+  // Return a compatible interface with the old mock wallet
+  return {
+    wallet: ctx.isConnected
+      ? {
+          address: ctx.address as string,
+          balance: ctx.balance ? parseFloat(ctx.balance) : 0,
+        }
+      : null,
+    connecting: ctx.isConnecting,
+    connect: ctx.openModal,
+    disconnect: ctx.disconnect,
+    openModal: ctx.openModal,
+    closeModal: ctx.closeModal,
+    modalOpen: ctx.modalOpen,
+  };
+}
+
+function WalletContextWrapper({ children }: { children: React.ReactNode }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const { address, isConnected, isConnecting, chainId } = useAccount();
+  const { data: balanceData } = useBalance({
+    address,
+    chainId: chainId,
+  });
+  const { disconnect: wagmiDisconnect } = useDisconnect();
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("alive_wallet");
-      if (raw) {
-        const parsed = parseWalletFromStorage(raw);
-        if (parsed) setWallet(parsed);
-        else localStorage.removeItem("alive_wallet"); // corrupted data, clean up
-      }
-    } catch {}
-  }, []);
-
-  const connect = useCallback(async () => {
-    setConnecting(true);
-    await new Promise((r) => setTimeout(r, 900));
-    const w = { address: fakeAddr(), balance: parseFloat((Math.random() * 8 + 1).toFixed(2)) };
-    setWallet(w);
-    try { localStorage.setItem("alive_wallet", JSON.stringify(w)); } catch {}
-    setConnecting(false);
-    setModalOpen(false);
-  }, []);
-
-  const disconnect = useCallback(() => {
-    setWallet(null);
-    try { localStorage.removeItem("alive_wallet"); } catch {}
-  }, []);
-
+  const openModal = useCallback(() => setModalOpen(true), []);
   const closeModal = useCallback(() => setModalOpen(false), []);
+  const disconnect = useCallback(() => {
+    wagmiDisconnect();
+    setModalOpen(false);
+  }, [wagmiDisconnect]);
 
   return (
-    <WalletCtx.Provider
+    <WalletContext.Provider
       value={{
-        wallet,
-        connecting,
-        connect,
-        disconnect,
-        openModal: () => setModalOpen(true),
+        address,
+        balance: balanceData?.formatted,
+        isConnected,
+        isConnecting,
+        openModal,
         closeModal,
         modalOpen,
+        disconnect,
       }}
     >
       {children}
-      {modalOpen && <ConnectModal />}
-    </WalletCtx.Provider>
+      {modalOpen && (
+        <ConnectModal onClose={closeModal} />
+      )}
+    </WalletContext.Provider>
   );
 }
 
-export function useWallet() {
-  const c = useContext(WalletCtx);
-  if (!c) throw new Error("useWallet outside WalletProvider");
-  return c;
-}
-
-function ConnectModal() {
-  const { connect, connecting, closeModal } = useWallet();
-  const wallets = [
-    { name: "Phantom", icon: "👻", popular: true },
-    { name: "Backpack", icon: "🎒" },
-    { name: "Solflare", icon: "🔥" },
-    { name: "Ledger", icon: "🔒" },
-  ];
+function ConnectModal({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-[100] bg-ink/70 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-4"
-      onClick={closeModal}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="connect-wallet-title"
+      onClick={onClose}
     >
-      <FocusTrap onClose={closeModal}>
-        <div
-          className="w-full max-w-md bg-bone border-[3px] border-ink shadow-[8px_8px_0_0_#0a0a0a]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-ink text-bone">
-            <div id="connect-wallet-title" className="font-display text-[18px] uppercase tracking-tight">Connect wallet</div>
-            <button onClick={closeModal} className="w-7 h-7 border-[2px] border-bone hover:bg-hot transition font-display" aria-label="Close dialog">×</button>
+      <div
+        className="w-full max-w-md bg-bone border-[3px] border-ink shadow-[8px_8px_0_0_#0a0a0a]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-ink text-bone">
+          <div className="font-display text-[18px] uppercase tracking-tight">Connect wallet</div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 border-[2px] border-bone hover:bg-hot transition font-display"
+          >
+            x
+          </button>
+        </div>
+        <div className="p-4">
+          <p className="font-mono text-[11px] font-bold uppercase opacity-70 mb-4">
+            Connect to X Layer (OKB) to launch and trade characters
+          </p>
+          <div className="flex justify-center">
+            <ConnectButton.Custom>
+              {({
+                account,
+                chain,
+                openConnectModal,
+                mounted,
+              }) => {
+                const connected = mounted && account && chain;
+
+                if (!mounted) {
+                  return (
+                    <div className="w-full py-4 text-center font-mono text-[12px] font-extrabold uppercase opacity-50">
+                      Loading...
+                    </div>
+                  );
+                }
+
+                if (!connected) {
+                  return (
+                    <button
+                      onClick={openConnectModal}
+                      className="w-full btn-brut !bg-acid"
+                    >
+                      Select Wallet
+                    </button>
+                  );
+                }
+
+                // Connected - close modal
+                setTimeout(onClose, 100);
+
+                return (
+                  <div className="w-full py-4 text-center font-mono text-[12px] font-extrabold uppercase text-[#1a8c1a]">
+                    Connected
+                  </div>
+                );
+              }}
+            </ConnectButton.Custom>
           </div>
-          <div className="p-4">
-            <p className="font-mono text-[11px] font-bold uppercase opacity-75 mb-4">
-              Preview mode — wallet simulation for demo purposes. No real transactions.
-            </p>
-            <div className="space-y-2">
-              {wallets.map((w) => (
-                <button
-                  key={w.name}
-                  onClick={connect}
-                  disabled={connecting}
-                  className="w-full flex items-center gap-3 px-3 py-3 border-[3px] border-ink bg-bone hover:bg-sun shadow-[3px_3px_0_0_#0a0a0a] hover:-translate-x-0.5 hover:-translate-y-0.5 transition disabled:opacity-50"
-                >
-                  <span className="text-[24px]">{w.icon}</span>
-                  <span className="font-display text-[16px] uppercase tracking-tight">{w.name}</span>
-                  {w.popular && <span className="ml-auto font-mono text-[9px] font-extrabold uppercase bg-acid border-[2px] border-ink px-1.5 py-0.5">popular</span>}
-                </button>
-              ))}
-            </div>
-            {connecting && (
-              <div className="mt-4 font-mono text-[11px] font-extrabold uppercase opacity-75 text-center" role="status">⟳ connecting…</div>
-            )}
+          <div className="mt-4 text-center">
+            <span className="font-mono text-[10px] font-bold uppercase opacity-50">
+              Supports: OKX Wallet, MetaMask, WalletConnect, Ledger
+            </span>
           </div>
         </div>
-      </FocusTrap>
+      </div>
     </div>
+  );
+}
+
+// Custom theme matching ALIVE design
+const aliveTheme = lightTheme({
+  accentColor: "#c6ff3d",
+  accentColorForeground: "#0a0a0a",
+  borderRadius: "none",
+  fontStack: "system",
+});
+
+export function WalletProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          theme={aliveTheme}
+          modalSize="compact"
+        >
+          <WalletContextWrapper>{children}</WalletContextWrapper>
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
+
+// Export a simple connect button that can be used anywhere
+export function WalletConnectButton() {
+  const { wallet, openModal, disconnect } = useWallet();
+
+  const short = (a: string) => `${a.slice(0, 6)}...${a.slice(-4)}`;
+
+  if (wallet) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="font-mono font-bold text-[11px] uppercase px-3 py-2 border-[3px] border-ink bg-acid shadow-[3px_3px_0_0_#0a0a0a]">
+          {wallet.balance.toFixed(2)} OKB {short(wallet.address)}
+        </span>
+        <button
+          onClick={disconnect}
+          className="font-mono font-bold text-[11px] uppercase px-2.5 py-2 border-[3px] border-ink bg-bone hover:bg-hot transition"
+          title="disconnect"
+        >
+          X
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={openModal}
+      className="font-mono font-bold text-[12px] uppercase px-3 py-2 border-[3px] border-ink bg-ink text-bone shadow-[3px_3px_0_0_#c6ff3d] hover:bg-hot hover:!shadow-[3px_3px_0_0_#0a0a0a] transition"
+    >
+      Connect
+    </button>
   );
 }
