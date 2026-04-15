@@ -7,7 +7,7 @@ import { getBattles, getCharacters, type Battle as APIBattle, type Character as 
 import Link from "next/link";
 
 type LocalBattle = {
-  id: number;
+  id: string;
   a: Character;
   b: Character;
   pool: string;
@@ -65,15 +65,18 @@ export default function BattlesPage() {
         if (apiBattles.length > 0 && apiCharacters.length > 0) {
           const charMap = new Map(apiCharacters.map(c => [c.ticker, toDisplayCharacter(c)]));
           const localBattles: LocalBattle[] = apiBattles
-            .filter(b => charMap.has(b.challengerTicker) && charMap.has(b.defenderTicker))
+            .filter(b => charMap.has(b.characterA.ticker) && charMap.has(b.characterB.ticker))
             .map(b => ({
-              id: parseInt(b.id),
-              a: charMap.get(b.challengerTicker)!,
-              b: charMap.get(b.defenderTicker)!,
-              pool: `${parseFloat(b.totalStake || "0").toFixed(1)} OKB`,
-              status: b.status === "ACTIVE" ? "LIVE" : b.status,
+              id: b.id,
+              a: charMap.get(b.characterA.ticker)!,
+              b: charMap.get(b.characterB.ticker)!,
+              pool: `${(parseFloat(b.poolA || "0") + parseFloat(b.poolB || "0")).toFixed(1)} OKB`,
+              status: b.status === "active" ? "LIVE" : b.status.toUpperCase(),
               round: b.currentRound || 0,
-              votes: { a: 50, b: 50 },
+              votes: {
+                a: Math.round((parseFloat(b.poolA || "0") / (parseFloat(b.poolA || "0") + parseFloat(b.poolB || "1"))) * 100),
+                b: Math.round((parseFloat(b.poolB || "0") / (parseFloat(b.poolA || "0") + parseFloat(b.poolB || "1"))) * 100)
+              },
             }));
           setBattles(localBattles);
 

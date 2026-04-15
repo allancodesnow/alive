@@ -131,7 +131,7 @@ export async function getVitalityHistory(ticker: string): Promise<{
 // ============ Battle API ============
 
 export type Battle = {
-  id: number;
+  id: string;
   characterA: { name: string; ticker: string; tokenAddress: string };
   characterB: { name: string; ticker: string; tokenAddress: string };
   poolA: string;
@@ -141,7 +141,7 @@ export type Battle = {
   roundsWonB: number;
   winner: string | null;
   status: 'pending' | 'active' | 'completed';
-  startTime: string;
+  startTime?: string;
 };
 
 export async function getBattles(options?: {
