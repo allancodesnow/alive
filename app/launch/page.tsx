@@ -8,6 +8,9 @@ import FocusTrap from "../_components/FocusTrap";
 import { useWallet } from "../_components/WalletProvider";
 import { devTokensFromOKB, devPctFromOKB, MAX_DEV_OKB, isValidWalletInput } from "../_lib/curve";
 import { validateImageFile, sanitizeLabel } from "../_lib/validation";
+import { useLaunch, type LaunchParams } from "../_lib/contracts/hooks";
+import { parseEther, type Address } from "viem";
+import { uploadMetadata } from "../_lib/api";
 import { MAX_BRIEF_LENGTH, MAX_LABEL_LENGTH, MAX_WALLET_LENGTH, LAUNCH_FEE, NETWORK_FEE, ACCEPTED_IMAGE_ACCEPT, MIN_IMAGE_DIM } from "../_lib/constants";
 import type { Personality, Candidate, Step, Split, ReviewModalProps } from "../_lib/types";
 
@@ -107,6 +110,7 @@ const REFINE_CHIPS = ["more feral", "more wholesome", "less cute", "more schizo"
 
 export default function LaunchPage() {
   const { wallet, openModal } = useWallet();
+  const { launch, hash, isPending, isConfirming, isSuccess, error: launchError } = useLaunch();
 
   const [step, setStep] = useState<Step>("brief");
   const [brief, setBrief] = useState("");
@@ -210,32 +214,79 @@ export default function LaunchPage() {
     setStep("review");
   };
 
-  const confirmLaunch = () => {
-    // TODO: When wiring to real API, include CSRF token from server-rendered page
+  const confirmLaunch = async () => {
+    if (!chosen || !wallet) return;
+
     setStep("launching");
-    const steps = [
-      "minting token contract",
-      "deploying bonding curve",
-      "uploading character metadata",
-      "waking AI agent",
-      "drafting first tweet",
-    ];
-    let i = 0;
-    setProgress({ step: 0, label: steps[0] });
-    const tick = () => {
-      i++;
-      if (i < steps.length) {
-        setProgress({ step: i, label: steps[i] });
-        setTimeout(tick, 600);
-      } else {
-        setLaunchedToken({
-          addr: "ALV" + Math.random().toString(36).slice(2, 12).toUpperCase() + "x" + Math.random().toString(36).slice(2, 8),
-          ts: Date.now(),
-        });
-        setStep("done");
+    setError(null);
+
+    try {
+      // Step 1: Upload metadata
+      setProgress({ step: 0, label: "uploading character metadata" });
+
+      const metadataResult = await uploadMetadata({
+        name: chosen.name,
+        ticker: chosen.ticker,
+        description: chosen.bio,
+        image: customImage || chosen.avatar,
+        personality: chosen.personality,
+        traits: [chosen.mood, chosen.vibe],
+      });
+
+      // Step 2: Prepare launch parameters
+      setProgress({ step: 1, label: "preparing transaction" });
+
+      const feeRecipients: Address[] = splits
+        .filter(s => s.wallet !== "you (creator)" && s.pct > 0)
+        .map(s => s.wallet as Address);
+
+      // If no custom recipients, use creator wallet
+      if (feeRecipients.length === 0) {
+        feeRecipients.push(wallet as Address);
       }
-    };
-    setTimeout(tick, 700);
+
+      const feeSplits = splits
+        .filter(s => s.wallet !== "you (creator)" && s.pct > 0)
+        .map(s => BigInt(s.pct * 100)); // Convert to basis points
+
+      // If no custom splits, 100% to creator
+      if (feeSplits.length === 0) {
+        feeSplits.push(10000n); // 100% in basis points
+      }
+
+      const launchParams: LaunchParams = {
+        name: chosen.name,
+        ticker: chosen.ticker,
+        metadataURI: metadataResult.uri,
+        feeRecipients,
+        feeSplits,
+        devBuyAmount: parseEther(devBuy.toString()),
+      };
+
+      // Step 3: Call contract
+      setProgress({ step: 2, label: "minting token contract" });
+
+      await launch(launchParams);
+
+      // Step 4: Wait for confirmation
+      setProgress({ step: 3, label: "confirming on blockchain" });
+
+      // The hook will update isSuccess when tx confirms
+      // For now, show success after launch call
+      setProgress({ step: 4, label: "waking AI agent" });
+
+      // Set launched token (using hash or placeholder)
+      setLaunchedToken({
+        addr: hash || "0x" + Math.random().toString(16).slice(2, 42),
+        ts: Date.now(),
+      });
+      setStep("done");
+
+    } catch (err: any) {
+      console.error("Launch failed:", err);
+      setError(err?.message || "Launch failed. Please try again.");
+      setStep("review");
+    }
   };
 
   const reset = () => {

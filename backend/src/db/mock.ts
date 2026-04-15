@@ -303,8 +303,55 @@ const seedCharacters: Omit<Character, "id">[] = [
   },
 ];
 
-// Seed on initialization
-seedCharacters.forEach(char => characterStore.insert(char));
+// Seed on initialization - capture IDs for battles
+const seededCharacters = seedCharacters.map(char => characterStore.insert(char));
+const [pepe, wojak, giga, doge, scat, bean] = seededCharacters;
+
+// Seed battles between characters
+const seedBattles: Omit<Battle, "id">[] = [
+  {
+    characterA: pepe.id,
+    characterB: wojak.id,
+    poolA: "2500.00",
+    poolB: "1800.00",
+    roundsCompleted: 3,
+    winner: undefined,
+    status: "LIVE",
+    roundResults: [pepe.id, wojak.id, pepe.id],
+    startTime: new Date(Date.now() - 30 * 60 * 1000),
+    createdAt: new Date(Date.now() - 30 * 60 * 1000),
+    updatedAt: new Date(),
+  },
+  {
+    characterA: giga.id,
+    characterB: doge.id,
+    poolA: "500.00",
+    poolB: "350.00",
+    roundsCompleted: 0,
+    winner: undefined,
+    status: "OPEN",
+    roundResults: [],
+    startTime: undefined,
+    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    updatedAt: new Date(),
+  },
+  {
+    characterA: bean.id,
+    characterB: scat.id,
+    poolA: "1200.00",
+    poolB: "1500.00",
+    roundsCompleted: 5,
+    winner: scat.id,
+    status: "RESOLVED",
+    roundResults: [bean.id, scat.id, scat.id, bean.id, scat.id],
+    startTime: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    endTime: new Date(Date.now() - 20 * 60 * 60 * 1000),
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    updatedAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
+  },
+];
+
+seedBattles.forEach(battle => battleStore.insert(battle));
 
 // Export mock database interface matching Drizzle
 export const mockDb = {
