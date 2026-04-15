@@ -14,13 +14,14 @@ export const CONTRACT_ADDRESSES = {
     battleArena: process.env.NEXT_PUBLIC_BATTLE_ARENA_ADDRESS as Address,
     feeSplitter: process.env.NEXT_PUBLIC_FEE_SPLITTER_ADDRESS as Address,
   },
-  // Testnet (chainId: 195)
+  // Testnet (chainId: 195) - DEPLOYED
   195: {
-    factory: '0x0000000000000000000000000000000000000000' as Address,
-    bondingCurve: '0x0000000000000000000000000000000000000000' as Address,
-    registry: '0x0000000000000000000000000000000000000000' as Address,
-    battleArena: '0x0000000000000000000000000000000000000000' as Address,
-    feeSplitter: '0x0000000000000000000000000000000000000000' as Address,
+    factory: '0x677e2CD672DdF0F0Cd8F744663FF6787bc0Cc7F7' as Address,
+    bondingCurve: '0xE0A417c8f3ade5007e5166D79B893307Ec2B0DCC' as Address,
+    registry: '0x1c3964595EBFba18ED528626f1B144a9dC711D3c' as Address,
+    battleArena: '0x17d1983E22c66527fc1F94E74A26Af1016F41211' as Address,
+    feeSplitter: '0x92Ee488f8CFc33bc8cfD98648267BB3598d8b90e' as Address,
+    lpLocker: '0x6B3FBd72a07772d4467B4DA8148dc261fEB185df' as Address,
   },
   // Local Anvil (chainId: 31337)
   31337: {
