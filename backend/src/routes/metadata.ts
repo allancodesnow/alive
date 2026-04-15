@@ -33,7 +33,7 @@ metadataRoutes.post("/upload", zValidator("json", uploadSchema), async (c) => {
       { trait_type: "Personality", value: data.personality },
       ...data.traits.map((trait) => ({ trait_type: "Trait", value: trait })),
     ],
-    external_url: `https://alive.xyz/c/${data.ticker}`,
+    external_url: `https://alivememe.online/c/${data.ticker}`,
     animation_url: null,
   };
 

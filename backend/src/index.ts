@@ -23,7 +23,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "https://alive.xyz",
+      "https://alivememe.online",
       "https://alive-production.up.railway.app",
       /\.railway\.app$/,
     ],
