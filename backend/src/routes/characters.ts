@@ -130,14 +130,18 @@ const createSchema = z.object({
   personality: z.enum(["FERAL", "COPIUM", "ALPHA", "SCHIZO", "WHOLESOME", "MENACE"]),
   bio: z.string().optional(),
   creator: z.string().optional(),
+  tokenAddress: z.string().optional(), // Allow real token address from blockchain
+  vitality: z.number().optional(),
+  holders: z.number().optional(),
+  marketCap: z.string().optional(),
 });
 
 characterRoutes.post("/", zValidator("json", createSchema), async (c) => {
   const data = c.req.valid("json");
 
   try {
-    // Generate a mock token address for demo
-    const tokenAddress = `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
+    // Use provided tokenAddress or generate mock
+    const tokenAddress = data.tokenAddress || `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
 
     const [character] = await db
       .insert(characters)
@@ -149,6 +153,10 @@ characterRoutes.post("/", zValidator("json", createSchema), async (c) => {
         personality: data.personality,
         bio: data.bio || "",
         mood: data.personality, // Initial mood matches personality
+        vitality: data.vitality || 10000, // Start at 100% for testnet
+        hp: data.vitality || 10000,
+        holders: data.holders || 1,
+        marketCap: data.marketCap || "0.05",
       })
       .returning();
 
