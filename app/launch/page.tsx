@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import Nav from "../_components/Nav";
 import Footer from "../_components/Footer";
@@ -127,6 +127,56 @@ export default function LaunchPage() {
   ]);
   const [progress, setProgress] = useState<{ step: number; label: string }>({ step: 0, label: "" });
   const [launchedToken, setLaunchedToken] = useState<{ addr: string; ts: number } | null>(null);
+  const [launchInitiated, setLaunchInitiated] = useState(false);
+
+  // Watch for transaction hash (user signed)
+  useEffect(() => {
+    if (launchInitiated && hash) {
+      setProgress({ step: 3, label: "confirming on blockchain..." });
+    }
+  }, [hash, launchInitiated]);
+
+  // Watch for transaction success
+  useEffect(() => {
+    if (launchInitiated && isSuccess && hash) {
+      setProgress({ step: 4, label: "token launched!" });
+      setLaunchedToken({
+        addr: hash,
+        ts: Date.now(),
+      });
+      setStep("done");
+      setLaunchInitiated(false);
+    }
+  }, [isSuccess, hash, launchInitiated]);
+
+  // Watch for launch errors
+  useEffect(() => {
+    if (launchInitiated && launchError) {
+      const msg = launchError.message || "Transaction failed";
+      // Check for user rejection
+      if (msg.includes("rejected") || msg.includes("denied") || msg.includes("cancelled")) {
+        setError("Transaction cancelled by user");
+      } else {
+        setError(msg);
+      }
+      setStep("review");
+      setLaunchInitiated(false);
+    }
+  }, [launchError, launchInitiated]);
+
+  // Watch for pending state (wallet is open)
+  useEffect(() => {
+    if (launchInitiated && isPending) {
+      setProgress({ step: 2, label: "confirm in your wallet..." });
+    }
+  }, [isPending, launchInitiated]);
+
+  // Watch for confirming state (tx submitted, waiting for block)
+  useEffect(() => {
+    if (launchInitiated && isConfirming) {
+      setProgress({ step: 3, label: "mining transaction..." });
+    }
+  }, [isConfirming, launchInitiated]);
 
   const totalSplit = splits.reduce((s, x) => s + x.pct, 0);
   const splitOk = totalSplit === 100;
@@ -219,6 +269,7 @@ export default function LaunchPage() {
 
     setStep("launching");
     setError(null);
+    setLaunchInitiated(false);
 
     try {
       // Step 1: Upload metadata
@@ -263,29 +314,19 @@ export default function LaunchPage() {
         devBuyAmount: parseEther(devBuy.toString()),
       };
 
-      // Step 3: Call contract
-      setProgress({ step: 2, label: "minting token contract" });
+      // Step 3: Call contract - this triggers wallet popup
+      setProgress({ step: 2, label: "waiting for wallet signature..." });
+      setLaunchInitiated(true);
 
-      await launch(launchParams);
-
-      // Step 4: Wait for confirmation
-      setProgress({ step: 3, label: "confirming on blockchain" });
-
-      // The hook will update isSuccess when tx confirms
-      // For now, show success after launch call
-      setProgress({ step: 4, label: "waking AI agent" });
-
-      // Set launched token (using hash or placeholder)
-      setLaunchedToken({
-        addr: hash || "0x" + Math.random().toString(16).slice(2, 42),
-        ts: Date.now(),
-      });
-      setStep("done");
+      // Call launch - this opens wallet, doesn't return promise
+      // useEffect hooks above will handle hash/success/error
+      launch(launchParams);
 
     } catch (err: any) {
       console.error("Launch failed:", err);
       setError(err?.message || "Launch failed. Please try again.");
       setStep("review");
+      setLaunchInitiated(false);
     }
   };
 
