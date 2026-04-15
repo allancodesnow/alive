@@ -24,7 +24,7 @@ app.use(
     origin: [
       "http://localhost:3000",
       "https://alive.xyz",
-      "https://assisted-production.up.railway.app",
+      "https://alive-production.up.railway.app",
       /\.railway\.app$/,
     ],
     credentials: true,

@@ -196,7 +196,7 @@ If not configured, the system runs in **mock mode** for testing.
 
 ## Deployment
 
-**Frontend:** https://assisted-production.up.railway.app
+**Frontend:** https://alive-production.up.railway.app
 **Backend:** https://backend-production-0e38.up.railway.app
 
 **Smart Contracts (X Layer Mainnet):**
