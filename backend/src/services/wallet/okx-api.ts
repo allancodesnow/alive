@@ -1,15 +1,18 @@
 /**
  * OKX Onchain OS API Client
- * Uses the onchainos CLI for wallet operations on X Layer
- * CLI must be authenticated: onchainos wallet login <email>
+ * Uses direct HTTP API calls for wallet operations on X Layer
  */
 
-import { execSync, exec } from "child_process";
 import crypto from "crypto";
 
-// X Layer (OKB) chain ID
+// X Layer chain config
 const X_LAYER_CHAIN_ID = "196";
-const CHAIN_NAME = "xlayer";
+const X_LAYER_TESTNET_CHAIN_ID = "195";
+
+// OKX API endpoints
+const OKX_BASE_URL = "https://www.okx.com";
+const OKX_DEX_API = "https://www.okx.com/api/v5/dex/aggregator";
+const OKX_WALLET_API = "https://www.okx.com/api/v5/waas";
 
 // Native OKB token
 const OKB_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -42,86 +45,98 @@ interface TxResult {
 }
 
 export class OkxApiClient {
-  private cliAvailable: boolean;
+  private apiKey: string;
+  private secretKey: string;
+  private passphrase: string;
+  private projectId: string;
   private mockMode: boolean;
 
   constructor() {
-    // Check if onchainos CLI is available and authenticated
-    this.cliAvailable = this.checkCliAvailable();
-    this.mockMode = !this.cliAvailable;
+    this.apiKey = process.env.OKX_API_KEY || "";
+    this.secretKey = process.env.OKX_SECRET_KEY || "";
+    this.passphrase = process.env.OKX_PASSPHRASE || "";
+    this.projectId = process.env.OKX_PROJECT_ID || this.apiKey;
+
+    // Check if credentials are available
+    this.mockMode = !this.apiKey || !this.secretKey || !this.passphrase;
 
     if (this.mockMode) {
-      console.log("[OKX] Running in mock mode - onchainos CLI not available or not authenticated");
+      console.log("[OKX] Running in mock mode - API credentials not configured");
     } else {
-      console.log("[OKX] Using onchainos CLI for wallet operations");
+      console.log("[OKX] API credentials configured - using real OKX API");
     }
   }
 
   /**
-   * Check if onchainos CLI is installed and authenticated
+   * Generate OKX API signature
    */
-  private checkCliAvailable(): boolean {
-    try {
-      const result = execSync("onchainos wallet status", {
-        encoding: "utf-8",
-        timeout: 5000,
-        env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` },
-      });
-      const status = JSON.parse(result);
-      return status.ok && status.data?.loggedIn === true;
-    } catch (error) {
-      return false;
-    }
+  private generateSignature(
+    timestamp: string,
+    method: string,
+    requestPath: string,
+    body: string = ""
+  ): string {
+    const preHash = timestamp + method.toUpperCase() + requestPath + body;
+    return crypto
+      .createHmac("sha256", this.secretKey)
+      .update(preHash)
+      .digest("base64");
   }
 
   /**
-   * Execute onchainos CLI command
+   * Make authenticated API request to OKX
    */
-  private runCli(command: string): any {
+  private async apiRequest(
+    method: string,
+    path: string,
+    body?: any
+  ): Promise<any> {
+    const timestamp = new Date().toISOString();
+    const bodyStr = body ? JSON.stringify(body) : "";
+    const signature = this.generateSignature(timestamp, method, path, bodyStr);
+
+    const headers: Record<string, string> = {
+      "OK-ACCESS-KEY": this.apiKey,
+      "OK-ACCESS-SIGN": signature,
+      "OK-ACCESS-TIMESTAMP": timestamp,
+      "OK-ACCESS-PASSPHRASE": this.passphrase,
+      "OK-ACCESS-PROJECT": this.projectId,
+      "Content-Type": "application/json",
+    };
+
     try {
-      const result = execSync(`onchainos ${command}`, {
-        encoding: "utf-8",
-        timeout: 30000,
-        env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` },
+      const response = await fetch(`${OKX_BASE_URL}${path}`, {
+        method,
+        headers,
+        body: bodyStr || undefined,
       });
-      return JSON.parse(result);
+
+      const data = await response.json();
+
+      if (data.code !== "0" && data.code !== 0) {
+        console.error(`[OKX API] Error: ${data.msg || JSON.stringify(data)}`);
+        return { ok: false, error: data.msg || "API error" };
+      }
+
+      return { ok: true, data: data.data };
     } catch (error: any) {
-      console.error(`[OKX CLI] Error: ${error.message}`);
-      throw error;
+      console.error(`[OKX API] Request failed: ${error.message}`);
+      return { ok: false, error: error.message };
     }
   }
 
   /**
-   * Check if running in mock mode (no real API calls)
+   * Check if running in mock mode
    */
   isMockMode(): boolean {
     return this.mockMode;
   }
 
   /**
-   * Get the primary wallet address for X Layer
-   */
-  async getPrimaryAddress(): Promise<string | null> {
-    if (this.mockMode) return null;
-
-    try {
-      const result = this.runCli(`wallet addresses --chain ${CHAIN_NAME}`);
-      if (result.ok && result.data?.xlayer?.length > 0) {
-        return result.data.xlayer[0].address;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
    * Create an agentic wallet for a character
-   * Uses OKX Onchain OS - creates a sub-account under the main wallet
    */
   async createWallet(characterTicker: string): Promise<WalletInfo> {
     if (this.mockMode) {
-      // Generate mock wallet for testing
       const mockId = `mock_wallet_${characterTicker}_${Date.now()}`;
       const mockAddress = `0x${crypto.randomBytes(20).toString("hex")}`;
       console.log(`[OKX Mock] Created wallet for ${characterTicker}: ${mockAddress}`);
@@ -129,35 +144,35 @@ export class OkxApiClient {
     }
 
     try {
-      // Use onchainos wallet add to create a new account
-      const result = this.runCli(`wallet add --name "ALIVE_${characterTicker}"`);
+      // Create wallet using WaaS API
+      const result = await this.apiRequest("POST", "/api/v5/waas/wallet/create-wallet", {
+        walletName: `ALIVE_${characterTicker}`,
+        chainId: X_LAYER_TESTNET_CHAIN_ID,
+      });
 
       if (result.ok && result.data) {
-        // Get the new account's address
-        const addresses = this.runCli(`wallet addresses --chain ${CHAIN_NAME}`);
-        const xlayerAddr = addresses.data?.xlayer?.[0]?.address;
-
+        const wallet = Array.isArray(result.data) ? result.data[0] : result.data;
         return {
-          walletId: result.data.accountId || `alive_${characterTicker}`,
-          address: xlayerAddr || `0x${crypto.randomBytes(20).toString("hex")}`,
+          walletId: wallet.walletId || `alive_${characterTicker}_${Date.now()}`,
+          address: wallet.address || `0x${crypto.randomBytes(20).toString("hex")}`,
         };
       }
 
-      throw new Error("Failed to create wallet");
+      // Fallback: generate deterministic address from character
+      const deterministicAddr = "0x" + crypto
+        .createHash("sha256")
+        .update(`ALIVE_${characterTicker}_${this.projectId}`)
+        .digest("hex")
+        .slice(0, 40);
+
+      return {
+        walletId: `alive_${characterTicker}_${Date.now()}`,
+        address: deterministicAddr,
+      };
     } catch (error: any) {
-      // Fall back to using existing primary wallet with character-specific ID
-      const primaryAddr = await this.getPrimaryAddress();
-      if (primaryAddr) {
-        return {
-          walletId: `alive_${characterTicker}_${Date.now()}`,
-          address: primaryAddr,
-        };
-      }
-
-      // Final fallback to mock
-      const mockId = `mock_wallet_${characterTicker}_${Date.now()}`;
+      console.error(`[OKX] Failed to create wallet: ${error.message}`);
       const mockAddress = `0x${crypto.randomBytes(20).toString("hex")}`;
-      return { walletId: mockId, address: mockAddress };
+      return { walletId: `fallback_${characterTicker}`, address: mockAddress };
     }
   }
 
@@ -170,30 +185,40 @@ export class OkxApiClient {
   }> {
     if (this.mockMode) {
       return {
-        okb: "10.5", // Mock 10.5 OKB
+        okb: "10.5",
         tokens: [],
       };
     }
 
     try {
-      const result = this.runCli(`wallet balance --chain ${CHAIN_NAME}`);
+      // Get token balances using DEX API
+      const result = await this.apiRequest(
+        "GET",
+        `/api/v5/dex/aggregator/all-tokens?chainId=${X_LAYER_TESTNET_CHAIN_ID}`
+      );
 
-      if (result.ok && result.data) {
-        // Parse balance from CLI output
-        const balances = result.data.balances || [];
+      // Also try to get balance from wallet API
+      const balanceResult = await this.apiRequest(
+        "GET",
+        `/api/v5/waas/asset/balances?address=${walletAddress}&chainId=${X_LAYER_TESTNET_CHAIN_ID}`
+      );
+
+      if (balanceResult.ok && balanceResult.data) {
+        const balances = Array.isArray(balanceResult.data) ? balanceResult.data : [balanceResult.data];
         const okbBalance = balances.find((b: any) =>
-          b.symbol?.toUpperCase() === "OKB" ||
-          b.tokenAddress === OKB_ADDRESS
+          b.tokenSymbol?.toUpperCase() === "OKB" ||
+          b.tokenAddress === OKB_ADDRESS ||
+          b.tokenAddress === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         );
 
         return {
-          okb: okbBalance?.balance || "0",
+          okb: okbBalance?.balance || okbBalance?.tokenBalance || "0",
           tokens: balances
-            .filter((b: any) => b.symbol?.toUpperCase() !== "OKB")
+            .filter((b: any) => b.tokenSymbol?.toUpperCase() !== "OKB")
             .map((b: any) => ({
               tokenAddress: b.tokenAddress || "",
-              symbol: b.symbol || "",
-              balance: b.balance || "0",
+              symbol: b.tokenSymbol || "",
+              balance: b.balance || b.tokenBalance || "0",
               balanceUsd: b.balanceUsd || "0",
             })),
         };
@@ -207,7 +232,7 @@ export class OkxApiClient {
   }
 
   /**
-   * Send OKB to another address (for tips, battle stakes)
+   * Send OKB to another address
    */
   async sendOkb(
     fromWalletId: string,
@@ -221,15 +246,20 @@ export class OkxApiClient {
     }
 
     try {
-      const result = this.runCli(
-        `wallet send --chain ${CHAIN_NAME} --to ${toAddress} --amount ${amount}`
-      );
+      const result = await this.apiRequest("POST", "/api/v5/waas/wallet/transfer", {
+        walletId: fromWalletId,
+        toAddress,
+        amount,
+        tokenAddress: OKB_ADDRESS,
+        chainId: X_LAYER_TESTNET_CHAIN_ID,
+      });
 
-      if (result.ok && result.data?.txHash) {
-        return { success: true, txHash: result.data.txHash };
+      if (result.ok && result.data) {
+        const tx = Array.isArray(result.data) ? result.data[0] : result.data;
+        return { success: true, txHash: tx.txHash || tx.transactionHash };
       }
 
-      return { success: false, error: result.msg || "Transaction failed" };
+      return { success: false, error: result.error || "Transaction failed" };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -256,24 +286,42 @@ export class OkxApiClient {
     }
 
     try {
-      const result = this.runCli(
-        `swap quote --chain ${CHAIN_NAME} --from ${fromToken} --to ${toToken} --amount ${amount}`
+      // Use OKX DEX Aggregator API
+      const params = new URLSearchParams({
+        chainId: X_LAYER_TESTNET_CHAIN_ID,
+        fromTokenAddress: fromToken,
+        toTokenAddress: toToken,
+        amount,
+        slippage: "0.01",
+      });
+
+      const result = await this.apiRequest(
+        "GET",
+        `/api/v5/dex/aggregator/quote?${params.toString()}`
       );
 
       if (result.ok && result.data) {
+        const quote = Array.isArray(result.data) ? result.data[0] : result.data;
         return {
           fromToken,
           toToken,
           fromAmount: amount,
-          toAmount: result.data.toAmount || amount,
-          priceImpact: result.data.priceImpact || "0",
-          route: result.data.route || [fromToken, toToken],
+          toAmount: quote.toTokenAmount || quote.toAmount || amount,
+          priceImpact: quote.priceImpact || "0",
+          route: quote.routerList || [fromToken, toToken],
         };
       }
 
-      throw new Error("Failed to get quote");
+      // Fallback mock quote
+      return {
+        fromToken,
+        toToken,
+        fromAmount: amount,
+        toAmount: (parseFloat(amount) * 0.99).toString(),
+        priceImpact: "0.01",
+        route: [fromToken, toToken],
+      };
     } catch (error: any) {
-      // Return mock quote on error
       return {
         fromToken,
         toToken,
@@ -286,7 +334,7 @@ export class OkxApiClient {
   }
 
   /**
-   * Execute a DEX swap (okx-dex-swap skill)
+   * Execute a DEX swap
    */
   async swap(
     walletId: string,
@@ -302,22 +350,47 @@ export class OkxApiClient {
     }
 
     try {
-      const result = this.runCli(
-        `swap execute --chain ${CHAIN_NAME} --from ${fromToken} --to ${toToken} --amount ${amount} --slippage ${slippageTolerance}`
+      // First get the swap data
+      const params = new URLSearchParams({
+        chainId: X_LAYER_TESTNET_CHAIN_ID,
+        fromTokenAddress: fromToken,
+        toTokenAddress: toToken,
+        amount,
+        slippage: slippageTolerance,
+        userWalletAddress: walletId,
+      });
+
+      const swapResult = await this.apiRequest(
+        "GET",
+        `/api/v5/dex/aggregator/swap?${params.toString()}`
       );
 
-      if (result.ok && result.data?.txHash) {
-        return { success: true, txHash: result.data.txHash };
+      if (swapResult.ok && swapResult.data) {
+        const swap = Array.isArray(swapResult.data) ? swapResult.data[0] : swapResult.data;
+
+        // Execute the transaction
+        const execResult = await this.apiRequest("POST", "/api/v5/waas/wallet/send-transaction", {
+          walletId,
+          chainId: X_LAYER_TESTNET_CHAIN_ID,
+          to: swap.tx?.to || swap.routerAddress,
+          data: swap.tx?.data || swap.data,
+          value: swap.tx?.value || "0",
+        });
+
+        if (execResult.ok && execResult.data) {
+          const tx = Array.isArray(execResult.data) ? execResult.data[0] : execResult.data;
+          return { success: true, txHash: tx.txHash || tx.transactionHash };
+        }
       }
 
-      return { success: false, error: result.msg || "Swap failed" };
+      return { success: false, error: "Swap execution failed" };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
 
   /**
-   * Check token security (okx-security skill)
+   * Check token security
    */
   async checkTokenSecurity(tokenAddress: string): Promise<{
     isSecure: boolean;
@@ -333,16 +406,20 @@ export class OkxApiClient {
     }
 
     try {
-      const result = this.runCli(
-        `security token-scan --chain ${CHAIN_NAME} --token ${tokenAddress}`
+      const result = await this.apiRequest(
+        "GET",
+        `/api/v5/dex/aggregator/token-info?chainId=${X_LAYER_TESTNET_CHAIN_ID}&tokenAddress=${tokenAddress}`
       );
 
       if (result.ok && result.data) {
-        const riskLevel = result.data.riskLevel || "medium";
+        const token = Array.isArray(result.data) ? result.data[0] : result.data;
+        const isHoneypot = token.isHoneypot === true || token.honeypot === true;
+        const hasWarnings = (token.warnings?.length || 0) > 0;
+
         return {
-          isSecure: riskLevel !== "high" && !result.data.isHoneypot,
-          riskLevel: riskLevel as "low" | "medium" | "high",
-          warnings: result.data.warnings || [],
+          isSecure: !isHoneypot && !hasWarnings,
+          riskLevel: isHoneypot ? "high" : hasWarnings ? "medium" : "low",
+          warnings: token.warnings || [],
         };
       }
 
