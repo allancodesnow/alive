@@ -123,6 +123,42 @@ characterRoutes.get("/:ticker/vitality", async (c) => {
   });
 });
 
+// Create character (public endpoint for demo/hackathon)
+const createSchema = z.object({
+  name: z.string().min(1).max(50),
+  ticker: z.string().min(2).max(10),
+  personality: z.enum(["FERAL", "COPIUM", "ALPHA", "SCHIZO", "WHOLESOME", "MENACE"]),
+  bio: z.string().optional(),
+  creator: z.string().optional(),
+});
+
+characterRoutes.post("/", zValidator("json", createSchema), async (c) => {
+  const data = c.req.valid("json");
+
+  try {
+    // Generate a mock token address for demo
+    const tokenAddress = `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
+
+    const [character] = await db
+      .insert(characters)
+      .values({
+        tokenAddress,
+        name: data.name,
+        ticker: data.ticker.toUpperCase(),
+        creator: data.creator || "0x0000000000000000000000000000000000000000",
+        personality: data.personality,
+        bio: data.bio || "",
+        mood: data.personality, // Initial mood matches personality
+      })
+      .returning();
+
+    return c.json(character);
+  } catch (error) {
+    console.error("Create character error:", error);
+    return c.json({ error: "Failed to create character" }, 500);
+  }
+});
+
 // Register character (called by indexer after on-chain event)
 const registerSchema = z.object({
   tokenAddress: z.string(),
